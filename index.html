@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Brackets and Tierlisting</title>
+<style>
+/* Layout: a broadcast-booth console. One stage in the middle, controls docked around it, results board below. */
+:root{
+  --ink:#0e1014; --panel:#161920; --panel-2:#1d212a; --line:#2a303c;
+  --fg:#eceef3; --muted:#8c93a3; --accent:#ffb21a; --accent-ink:#1c1300;
+  --win:#3ddc97; --danger:#ff6b6b;
+  --f-display:system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --f-body:var(--f-display);
+  --f-mono:SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --r:10px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--ink);color:var(--fg);font:16px/1.5 var(--f-body);
+  padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));}
+[hidden]{display:none!important}
+img{max-width:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1200px;margin:0 auto;padding-block:20px 60px;display:flex;flex-direction:column;gap:20px}
+
+/* top bar */
+.bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{font:600 26px/1.1 var(--f-display);display:flex;align-items:center;gap:10px;margin:0}
+.brand b{background:var(--accent);color:var(--accent-ink);padding:2px 8px 0;border-radius:4px}
+.bar .grow{flex:1}
+.crumb{font:600 20px/1.2 var(--f-display);margin:0;min-width:0;overflow-wrap:anywhere}
+.sub{color:var(--muted);font-size:13px}
+
+/* buttons */
+.btn{border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:8px 14px;font-weight:600;font-size:14px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--danger)}
+.btn.danger.armed{background:var(--danger);color:#1a0505;border-color:var(--danger)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.sm{padding:5px 10px;font-size:13px}
+kbd{font:500 11px var(--f-mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--muted);background:var(--ink)}
+
+/* library */
+.banner{display:flex;align-items:center;gap:14px;flex-wrap:wrap;border:1px solid var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--panel));border-radius:var(--r);padding:12px 16px}
+.banner .grow{flex:1;min-width:200px}
+.lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column}
+.strip{display:grid;grid-template-columns:repeat(4,1fr);aspect-ratio:4/1.1;background:var(--ink)}
+.strip > *{width:100%;height:100%;object-fit:cover;min-width:0}
+.card .body{padding:14px 16px;display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
+.card h3{margin:0;font:600 19px/1.25 var(--f-display);overflow-wrap:anywhere}
+.card p{margin:0;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.card .acts{display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 14px}
+.empty{border:1px dashed var(--line);border-radius:var(--r);padding:40px 20px;text-align:center;color:var(--muted)}
+
+/* placeholders */
+.ph{display:grid;place-items:center;font:700 26px var(--f-display);color:rgba(255,255,255,.92);overflow:hidden}
+
+/* editor */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:12px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.in{background:var(--ink);border:1px solid var(--line);border-radius:7px;padding:8px 10px;width:100%;min-width:0;text-transform:none;letter-spacing:0;font-weight:400;font-size:14px;color:var(--fg)}
+textarea.in{resize:vertical;min-height:70px}
+.rows{display:flex;flex-direction:column;gap:8px}
+.row{display:grid;grid-template-columns:28px 64px minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1.2fr) auto;gap:8px;align-items:center;background:var(--panel-2);border-radius:8px;padding:6px}
+.row .n{font:500 12px var(--f-mono);color:var(--muted);text-align:center}
+.row .th{width:64px;height:44px;border-radius:5px;overflow:hidden;background:var(--ink)}
+.row .th > *{width:100%;height:100%;object-fit:cover}
+.row .ph{font-size:16px}
+@media (max-width:760px){
+  .row{grid-template-columns:64px minmax(0,1fr) auto}
+  .row .n{display:none}
+  .row .in.u, .row .in.l{grid-column:1 / -1}
+}
+
+/* stage: bracket */
+.prog{height:4px;background:var(--panel-2);border-radius:2px;overflow:hidden}
+.prog > i{display:block;height:100%;background:var(--accent);transition:width .3s}
+.round{font:300 clamp(28px,5vw,44px)/1.1 var(--f-display);margin:0;text-align:center}
+.round small{display:block;font:500 13px var(--f-body);letter-spacing:.08em;color:var(--muted);margin-top:6px}
+.vs{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:18px;align-items:stretch}
+.vs .mid{display:grid;place-items:center;font:700 28px var(--f-display);color:var(--accent)}
+@media (max-width:640px){.vs{grid-template-columns:1fr}.vs .mid{font-size:24px}}
+.contender{position:relative;background:var(--panel);border:2px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;transition:transform .15s,border-color .15s,opacity .3s}
+.contender.pickable:hover{border-color:var(--accent)}
+.contender .pick{all:unset;cursor:pointer;display:flex;flex-direction:column;flex:1}
+.contender .pick.static{cursor:default}
+.contender .pick:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
+.contender.pickable .media:not(.vid){cursor:pointer}
+.media{position:relative}
+.media iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
+.media.vid > img{object-fit:cover}
+.play{position:absolute;inset:0;margin:auto;width:84px;height:84px;border-radius:50%;border:0;background:rgba(14,16,20,.78);display:grid;place-items:center;transition:transform .15s,background .15s;backdrop-filter:blur(3px)}
+.play:hover{transform:scale(1.08);background:var(--accent)}
+.play .tri{width:0;height:0;border-style:solid;border-width:16px 0 16px 26px;border-color:transparent transparent transparent #fff;margin-left:6px}
+.play:hover .tri{border-left-color:var(--accent-ink)}
+.play kbd{position:absolute;bottom:-26px;left:50%;transform:translateX(-50%)}
+.vnote{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:8px;padding:18px;background:rgba(14,16,20,.9);font-size:14px;text-align:left}
+.vnote strong{font-size:15px}
+.vnote span{color:var(--muted)}
+.vnote .vacts{display:flex;gap:8px;flex-wrap:wrap}
+.solo.wide{max-width:860px}
+.filenote{display:flex;gap:12px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:var(--r);padding:10px 14px;font-size:14px;color:var(--muted)}
+.filenote .grow{flex:1;min-width:220px}
+.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:14px}
+.steps code{font:500 12px var(--f-mono);background:var(--ink);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+.media{aspect-ratio:16/10;background:var(--ink);display:grid;place-items:center;overflow:hidden}
+.media > img{width:100%;height:100%;object-fit:contain}
+.media > .ph{width:100%;height:100%;font-size:clamp(40px,8vw,90px)}
+.contender .nm{display:block;padding:14px 16px 4px;font:500 clamp(18px,2.6vw,26px)/1.25 var(--f-display);overflow-wrap:anywhere}
+.contender .hint{padding:0 16px 14px;flex-wrap:wrap;color:var(--muted);font-size:13px;display:flex;gap:8px;align-items:center}
+.contender .tools{position:absolute;top:8px;right:8px;display:flex;gap:6px}
+.chip{background:rgba(14,16,20,.82);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:600;text-decoration:none;color:var(--fg);backdrop-filter:blur(4px)}
+.chip:hover{border-color:var(--accent)}
+.contender.won{border-color:var(--win);transform:scale(1.02)}
+.contender.won::after{content:"WINNER";position:absolute;left:12px;top:12px;background:var(--win);color:#04170e;font:700 14px var(--f-display);letter-spacing:.06em;padding:3px 10px;border-radius:5px}
+.contender.lost{opacity:.35}
+.solo{max-width:520px;margin:0 auto;width:100%}
+
+/* champion */
+.champ{text-align:center;display:flex;flex-direction:column;gap:14px;align-items:center}
+.champ .crown{font:300 clamp(36px,7vw,64px)/1.1 var(--f-display);color:var(--accent);margin:0}
+.champ .contender{max-width:560px;width:100%;border-color:var(--accent)}
+.places{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.place{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:14px}
+.place b{font:600 12px var(--f-display);color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-right:6px}
+
+/* bracket tree */
+.tree{display:flex;gap:16px;overflow-x:auto;padding-bottom:8px}
+.col{display:flex;flex-direction:column;gap:8px;min-width:190px;justify-content:space-around}
+.col h4{margin:0 0 4px;font:600 12px var(--f-display);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.m{background:var(--panel);border:1px solid var(--line);border-radius:7px;overflow:hidden;font-size:13px}
+.m div{padding:5px 9px;display:flex;justify-content:space-between;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m div + div{border-top:1px solid var(--line)}
+.m .w{color:var(--fg);font-weight:700;background:color-mix(in srgb,var(--win) 14%,transparent)}
+.m .l{color:var(--muted)}
+.m .p{color:var(--muted);font-style:italic}
+
+/* tier stage */
+.tierpick{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.tb{min-width:76px;border:0;border-radius:9px;padding:14px 18px;font:700 26px/1 var(--f-display);color:#121212;display:flex;flex-direction:column;align-items:center;gap:4px;transition:transform .1s}
+.tb:hover{transform:translateY(-2px);filter:brightness(1.08)}
+.tb kbd{background:rgba(0,0,0,.18);border-color:rgba(0,0,0,.25);color:#121212}
+
+/* tier board */
+.board{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--panel)}
+.tr{display:grid;grid-template-columns:96px minmax(0,1fr);min-height:84px}
+.tr + .tr{border-top:1px solid var(--ink)}
+.tl{display:grid;place-items:center;font:700 24px/1 var(--f-display);color:#121212;padding:6px;text-align:center;overflow-wrap:anywhere;border:0;cursor:pointer}
+.tl.small{font-size:18px}
+.td{display:flex;flex-wrap:wrap;gap:4px;padding:4px;align-content:flex-start;min-width:0}
+.td.over{background:var(--panel-2)}
+.tile{position:relative;width:76px;height:76px;border-radius:5px;overflow:hidden;background:var(--ink);cursor:grab;flex:none;border:2px solid transparent}
+.tile > img,.tile > .ph{width:100%;height:100%;object-fit:cover;font-size:20px}
+.tile span{position:absolute;inset:auto 0 0 0;background:linear-gradient(transparent,rgba(0,0,0,.85));font-size:10px;line-height:1.2;padding:10px 4px 3px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile.sel{border-color:var(--accent)}
+.tile.drag{opacity:.4}
+.board.compact .tr{grid-template-columns:64px minmax(0,1fr);min-height:52px}
+.board.compact .tl{font-size:20px}
+.board.compact .tile{width:46px;height:46px}
+.board.compact .tile span{display:none}
+.pool .tl{background:var(--panel-2);color:var(--muted);font-size:16px}
+
+/* modal */
+.scrim{position:fixed;inset:0;background:rgba(5,6,8,.72);display:grid;place-items:center;z-index:50;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:min(640px,100%);max-height:100%;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
+.modal h2{margin:0;font:500 22px/1.2 var(--f-display)}
+.modal .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{flex:1;border:0;background:transparent;padding:10px;font-weight:700}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.chk{display:flex;gap:10px;align-items:flex-start;font-size:14px}
+.chk input{margin-top:4px;accent-color:var(--accent)}
+.chk small{display:block;color:var(--muted)}
+.found{font:500 13px var(--f-mono);color:var(--muted)}
+.found.ok{color:var(--win)}
+.help{font-size:13px;color:var(--muted);background:var(--ink);border-radius:8px;padding:10px 12px}
+.help code{font:500 12px var(--f-mono);color:var(--fg)}
+.trow{display:grid;grid-template-columns:minmax(0,1fr) 48px auto;gap:8px;align-items:center}
+.trow input[type=color]{width:48px;height:36px;border:1px solid var(--line);border-radius:7px;background:var(--ink);padding:2px}
+.lightbox{cursor:zoom-out}
+.lightbox img{max-height:80vh;border-radius:8px;object-fit:contain}
+.lightbox .cap{text-align:center;font:500 22px var(--f-display);margin-top:10px}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--ink);padding:10px 16px;border-radius:8px;font-weight:600;z-index:60;max-width:calc(100% - 32px)}
+
+body.noanim *{transition:none!important;animation:none!important}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@keyframes pop{from{transform:scale(.96);opacity:0}to{transform:none;opacity:1}}
+.enter{animation:pop .25s ease-out}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div id="layer"></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/* ---------- utilities ---------- */
+const $ = s => document.querySelector(s);
+const uid = () => Math.random().toString(36).slice(2, 10);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store = {
+  get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ toast('Could not save. Browser storage is full or blocked — try smaller images.'); return false; } }
+};
+let toastT;
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
+function shuffle(a){ a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function hash(s){ let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) | 0; return Math.abs(h); }
+function initials(n){ const w = (String(n || '').replace(/[^\p{L}\p{N}\s]/gu, '').trim() || '?').split(/\s+/); return (w.length > 1 ? w[0][0] + w[1][0] : w[0].slice(0, 2)).toUpperCase(); }
+function phHTML(name){ const h = hash(name) % 360; return `<div class="ph" style="background:linear-gradient(135deg,hsl(${h} 55% 38%),hsl(${(h+40)%360} 60% 24%))">${esc(initials(name))}</div>`; }
+function media(it){ return it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy" data-n="${esc(it.name)}">` : phHTML(it.name); }
+// broken image → placeholder
+document.addEventListener('error', e => { const t = e.target; if (t.tagName === 'IMG' && t.dataset.n !== undefined){ t.outerHTML = phHTML(t.dataset.n); } }, true);
+
+const YT = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([\w-]{11})/;
+const IMG_EXT = /\.(png|jpe?g|gif|webp|avif|svg|bmp)(\?.*)?$/i;
+function ytThumb(url){ const m = String(url || '').match(YT); return m ? `https://i.ytimg.com/vi/${m[1]}/hqdefault.jpg` : ''; }
+function nameFromUrl(u){ const y = String(u || '').match(YT); if (y) return 'YouTube ' + y[1]; try { const p = new URL(u).pathname.split('/').filter(Boolean).pop() || u; return decodeURIComponent(p).replace(IMG_EXT, '').replace(/[-_]+/g, ' '); } catch(e){ return u; } }
+// YouTube titles: oEmbed answers cross-origin, so placeholder names can be swapped for real titles
+async function fillYtTitles(items, after){
+  const todo = items.filter(it => it.link && YT.test(it.link) && /^YouTube [\w-]{11}$/.test(it.name));
+  let n = 0;
+  for (const it of todo){
+    try { const r = await fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent(it.link)); if (r.ok){ const j = await r.json(); if (j.title){ it.name = j.title; n++; } } } catch(e){}
+  }
+  if (n){ saveLib(); after && after(n); }
+}
+const isUrl = s => /^(https?:)?\/\//i.test(s) || /^data:image\//i.test(s);
+
+/* ---------- state ---------- */
+const DEFAULT_TIERS = [
+  {label:'S', color:'#ff7f7f'}, {label:'A', color:'#ffbf7f'}, {label:'B', color:'#ffdf7f'},
+  {label:'C', color:'#bfff7f'}, {label:'F', color:'#7fbfff'}, {label:'IDK', color:'#c3c6d4'}
+];
+const SAMPLE = {
+  id:'sample', title:'Best Snack (example)', desc:'An example bracket so you can try the controls. Delete it whenever you like.',
+  items:['Salt & Vinegar Crisps','Jaffa Cakes','Hobnobs','Pork Scratchings','Twiglets','Wotsits','Custard Creams','Monster Munch','Party Rings','Scotch Egg','Sausage Roll','Flapjack','Bourbon Biscuit','Mini Cheddars','Pickled Onion Crisps','Caramel Shortbread'].map(n => ({id:uid(), name:n, img:'', link:''}))
+};
+let lib = store.get('soloblt.lib', null) || [SAMPLE];
+let tiers = store.get('soloblt.tiers', null) || DEFAULT_TIERS.map(t => ({...t}));
+let prefs = store.get('soloblt.prefs', {anim:true, shuffle:true});
+let run = store.get('soloblt.run', null);
+const saveLib = () => store.set('soloblt.lib', lib);
+const saveRun = () => store.set('soloblt.run', run);
+const findB = id => lib.find(b => b.id === id);
+function applyPrefs(){ document.body.classList.toggle('noanim', !prefs.anim); }
+applyPrefs();
+
+/* ---------- import parsing ---------- */
+const NAME_KEYS = ['name','title','label','text','option','value','caption','displayName'];
+const IMG_KEYS = ['image','img','thumbnail','thumb','thumbnailUrl','thumbnail_url','imageUrl','image_url','picture','pic','src','cover','icon','avatar','art'];
+const LINK_KEYS = ['url','link','href','video','videoUrl','video_url','source','embed','youtube','clip'];
+function pick(o, keys){
+  for (const k of keys){ const v = o[k]; if (typeof v === 'string' && v.trim()) return v.trim(); if (v && typeof v === 'object' && typeof v.url === 'string') return v.url; }
+  // case-insensitive fallback
+  const low = Object.fromEntries(Object.entries(o).map(([k, v]) => [k.toLowerCase(), v]));
+  for (const k of keys){ const v = low[k.toLowerCase()]; if (typeof v === 'string' && v.trim()) return v.trim(); }
+  return '';
+}
+function normItem(x){
+  if (x == null) return null;
+  if (typeof x === 'string' || typeof x === 'number'){ return fromLine(String(x)); }
+  if (typeof x !== 'object' || Array.isArray(x)) return null;
+  let name = pick(x, NAME_KEYS), img = pick(x, IMG_KEYS), link = pick(x, LINK_KEYS);
+  if (img && !isUrl(img) && !img.startsWith('/')) img = '';
+  if (link && !isUrl(link)) link = '';
+  if (link && !img){ if (IMG_EXT.test(link)) { img = link; link = ''; } else img = ytThumb(link); }
+  if (!name && link) name = nameFromUrl(link);
+  if (!name && img) name = nameFromUrl(img);
+  if (!name) return null;
+  return {id:uid(), name, img, link};
+}
+function fromLine(line){
+  line = line.trim(); if (!line) return null;
+  let parts = line.split(/\s*\|\s*|\t/).map(s => s.trim()).filter(Boolean);
+  let name = '', img = '', link = '';
+  for (const p of parts){
+    if (isUrl(p)){
+      if (IMG_EXT.test(p) || /^data:image/i.test(p) || /ytimg|imgur|cdn|static|media/i.test(p) && !YT.test(p)) { if (!img) img = p; else if (!link) link = p; }
+      else if (!link) link = p; else if (!img) img = p;
+    } else if (!name) name = p;
+  }
+  if (link && !img) img = ytThumb(link);
+  if (!name) name = nameFromUrl(link || img);
+  if (!name) return null;
+  return {id:uid(), name, img, link};
+}
+function looksLikeItems(arr){ return Array.isArray(arr) && arr.length > 0 && arr.filter(x => normItem(x)).length >= Math.max(1, arr.length * 0.6); }
+function findItemsArray(o, depth = 0){
+  if (depth > 6 || o == null) return null;
+  if (looksLikeItems(o)) return o;
+  if (typeof o !== 'object') return null;
+  const pref = ['options','items','entries','choices','contestants','list','data','bracket','tierlist','elements','videos','results'];
+  const keys = Object.keys(o).sort((a, b) => (pref.indexOf(b.toLowerCase()) > -1) - (pref.indexOf(a.toLowerCase()) > -1));
+  for (const k of keys){ const r = findItemsArray(o[k], depth + 1); if (r) return r; }
+  return null;
+}
+function findTitle(o){
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return '';
+  const t = pick(o, ['title','name','bracketTitle']);
+  if (t) return t;
+  for (const v of Object.values(o)) if (v && typeof v === 'object' && !Array.isArray(v)){ const r = pick(v, ['title','name']); if (r) return r; }
+  return '';
+}
+function parseImport(text){
+  text = (text || '').trim();
+  if (!text) return {items:[], title:''};
+  if (/^[\[{]/.test(text)){
+    try {
+      const data = JSON.parse(text);
+      const arr = findItemsArray(data);
+      const desc = data && typeof data === 'object' && !Array.isArray(data) ? pick(data, ['description','desc']) : '';
+      return {items:(arr || []).map(normItem).filter(Boolean), title:findTitle(data), desc};
+    } catch(e){ return {items:[], title:'', error:'That looks like JSON but it does not parse: ' + e.message}; }
+  }
+  return {items:text.split(/\r?\n/).map(fromLine).filter(Boolean), title:''};
+}
+function readImageFile(file, max = 480){
+  return new Promise(res => {
+    const r = new FileReader();
+    r.onload = () => {
+      const im = new Image();
+      im.onload = () => {
+        const s = Math.min(1, max / Math.max(im.width, im.height));
+        const c = document.createElement('canvas'); c.width = Math.round(im.width * s); c.height = Math.round(im.height * s);
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        res({id:uid(), name:file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' '), img:c.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', .85), link:''});
+      };
+      im.onerror = () => res(null);
+      im.src = r.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+/* ---------- router ---------- */
+let view = {name:'home'};
+function go(v){ view = v; render(); window.scrollTo(0, 0); }
+function render(){
+  const app = $('#app');
+  if (view.name === 'home') app.innerHTML = homeHTML();
+  else if (view.name === 'edit') app.innerHTML = editHTML();
+  else if (view.name === 'play') app.innerHTML = playHTML();
+  bindView();
+  if (view.name === 'play' && run && run.mode === 'tier' && prefs.autoplay && canEmbed()){ const m = document.querySelector('.solo .media.vid'); m && playVideo(m.dataset.iid); }
+}
+
+/* ---------- home ---------- */
+function runSummary(){
+  if (!run) return '';
+  if (run.mode === 'bracket'){ const r = curRound(); return run.champion ? 'Finished' : `${roundName(r.length)}, match ${matchNo()} of ${Math.ceil(r.length / 2)}`; }
+  return run.idx >= run.order.length ? 'Finished' : `Item ${run.idx + 1} of ${run.order.length}`;
+}
+function homeHTML(){
+  const cards = lib.map(b => {
+    const th = b.items.slice(0, 4); while (th.length < 4) th.push({name:b.title + th.length, img:''});
+    return `<article class="card">
+      <div class="strip">${th.map(media).join('')}</div>
+      <div class="body"><h3>${esc(b.title || 'Untitled')}</h3>
+        <p>${b.items.length} option${b.items.length === 1 ? '' : 's'}${b.desc ? ' · ' + esc(b.desc) : ''}</p></div>
+      <div class="acts">
+        <button class="btn primary sm" data-act="start" data-id="${b.id}" ${b.items.length < 2 ? 'disabled title="Add at least 2 options"' : ''}>Start</button>
+        <button class="btn sm" data-act="edit" data-id="${b.id}">Edit</button>
+        <button class="btn sm" data-act="export" data-id="${b.id}">Export</button>
+        <button class="btn sm ghost danger" data-act="del" data-id="${b.id}">Delete</button>
+      </div></article>`;
+  }).join('');
+  return `<header class="bar"><h1 class="brand">Brackets and Tierlisting</h1><div class="grow"></div>
+      <button class="btn" data-act="import">Import</button>
+      <button class="btn primary" data-act="new">New bracket</button></header>
+    ${run ? `<div class="banner"><div class="grow"><strong>${esc(run.title)}</strong> · ${run.mode === 'bracket' ? 'Bracket' : 'Tier list'}<div class="sub">${esc(runSummary())}</div></div>
+      <button class="btn primary" data-act="resume">Resume</button><button class="btn ghost danger" data-act="discard">Discard</button></div>` : ''}
+    ${!canEmbed() && lib.some(b => b.items.some(videoOf)) ? `<div class="filenote"><span class="grow">You opened this as a file, so YouTube won't let videos play inside it. They'll still open on YouTube.</span><button class="btn sm" data-act="videohelp">Make videos play here</button></div>` : ''}
+    <section class="lib">${cards || ''}</section>
+    ${lib.length ? '' : `<div class="empty">No brackets yet. Import one, or create a new bracket and add options.</div>`}`;
+}
+
+/* ---------- editor ---------- */
+function editHTML(){
+  const b = findB(view.id);
+  return `<header class="bar"><button class="btn ghost" data-act="home">← Library</button><div class="grow"></div>
+      <button class="btn" data-act="import-into">Paste list / JSON</button>
+      <label class="btn" for="imgfiles">Add images</label><input id="imgfiles" type="file" accept="image/*" multiple hidden>
+      <button class="btn primary" data-act="start" data-id="${b.id}" ${b.items.length < 2 ? 'disabled' : ''}>Start</button></header>
+    <section class="panel">
+      <label class="f">Bracket title<input class="in" id="ed-title" value="${esc(b.title)}"></label>
+      <label class="f">Description<textarea class="in" id="ed-desc" rows="2">${esc(b.desc || '')}</textarea></label>
+    </section>
+    <section class="panel">
+      <div class="bar"><h2 class="crumb">Options <span class="sub">(${b.items.length})</span></h2><div class="grow"></div>
+        <button class="btn sm" data-act="dedupe">Remove duplicates</button>
+        <button class="btn sm primary" data-act="add">Add option</button></div>
+      <div class="sub">Paste a YouTube link into the link field and the thumbnail fills itself in when the image field is empty.</div>
+      <div class="rows" id="rows">${b.items.map((it, i) => rowHTML(it, i)).join('')}</div>
+      ${b.items.length ? '' : '<div class="empty">No options yet. Add them one by one, paste a list, or drop in image files.</div>'}
+    </section>`;
+}
+function rowHTML(it, i){
+  return `<div class="row" data-iid="${it.id}"><span class="n">${i + 1}</span>
+    <div class="th">${media(it)}</div>
+    <input class="in nm" placeholder="Name" value="${esc(it.name)}" aria-label="Name">
+    <input class="in u" placeholder="Image URL" value="${it.img && it.img.startsWith('data:') ? '(uploaded image)' : esc(it.img)}" ${it.img && it.img.startsWith('data:') ? 'readonly' : ''} aria-label="Image URL">
+    <input class="in l" placeholder="Link (YouTube, clip…)" value="${esc(it.link)}" aria-label="Link">
+    <button class="btn sm ghost danger" data-act="rm" title="Remove">✕</button></div>`;
+}
+
+/* ---------- bracket engine ---------- */
+// run = {mode:'bracket', title, items:{id:item}, rounds:[[ids]], results:[[{w,l,bye}]], champion}
+const curRound = () => run.rounds[run.rounds.length - 1];
+const curRes = () => run.results[run.results.length - 1];
+const matchNo = () => curRes().length + 1;
+function roundName(n){ return n === 2 ? 'Final' : n <= 4 ? 'Semifinals' : n <= 8 ? 'Quarterfinals' : `Round of ${n}`; }
+function settleBracket(){
+  for (;;){
+    const r = curRound(), res = curRes();
+    if (r.length === 1){ run.champion = r[0]; return; }
+    const i = res.length * 2;
+    if (i >= r.length){ run.rounds.push(res.map(m => m.w)); run.results.push([]); continue; }
+    if (i + 1 >= r.length){ res.push({w:r[i], bye:true}); continue; }
+    return;
+  }
+}
+function pickBracket(side){
+  if (run.champion || busy) return;
+  const r = curRound(), i = curRes().length * 2;
+  const w = r[i + side], l = r[i + 1 - side];
+  const commit = () => { curRes().push({w, l}); settleBracket(); saveRun(); render(); };
+  if (prefs.anim){
+    busy = true;
+    document.querySelectorAll('.contender').forEach((el, k) => el.classList.add(k === side ? 'won' : 'lost'));
+    setTimeout(() => { busy = false; commit(); }, 650);
+  } else commit();
+}
+let busy = false;
+function undoBracket(){
+  if (busy) return;
+  run.champion = null;
+  for (;;){
+    let res = curRes();
+    if (!res.length){
+      if (run.rounds.length === 1) { toast('Nothing to undo'); return; }
+      run.rounds.pop(); run.results.pop(); continue;
+    }
+    const m = res.pop();
+    if (!m.bye) break;
+  }
+  saveRun(); render();
+}
+function bracketProgress(){
+  const total = Object.keys(run.items).length - 1; // every real match eliminates one option
+  let done = 0; run.results.forEach(r => r.forEach(m => { if (!m.bye) done++; }));
+  return Math.min(1, done / Math.max(1, total));
+}
+
+/* ---------- tier engine ---------- */
+// run = {mode:'tier', title, items, order:[ids], idx, tiers:[{label,color}], rows:[[ids]], hist:[{id,t}]}
+function placeTier(t){
+  if (run.idx >= run.order.length || t >= run.tiers.length) return;
+  const id = run.order[run.idx];
+  run.rows[t].push(id); run.hist.push({id, t}); run.idx++;
+  saveRun(); render();
+}
+function undoTier(){
+  const h = run.hist.pop(); if (!h){ toast('Nothing to undo'); return; }
+  run.rows.forEach(r => { const k = r.indexOf(h.id); if (k > -1) r.splice(k, 1); });
+  run.idx = Math.max(0, run.idx - 1);
+  // keep order consistent: put undone item back at the cursor
+  const oi = run.order.indexOf(h.id); if (oi !== run.idx){ run.order.splice(oi, 1); run.order.splice(run.idx, 0, h.id); }
+  saveRun(); render();
+}
+const tierTextColor = () => '#121212';
+
+/* ---------- play view ---------- */
+/* ---------- video ---------- */
+const CLIP = /(?:clips\.twitch\.tv\/(?:embed\?clip=)?|twitch\.tv\/[\w-]+\/clip\/)([\w-]+)/;
+function parseStart(link){
+  const m = String(link).match(/[?&#](?:t|start)=([\dhms]+)/); if (!m) return 0;
+  const v = m[1]; if (/^\d+$/.test(v)) return +v;
+  const g = v.match(/(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/); return (+g[1] || 0) * 3600 + (+g[2] || 0) * 60 + (+g[3] || 0);
+}
+function videoOf(it){
+  const l = it && it.link || ''; let m;
+  if ((m = l.match(YT))) return {kind:'yt', id:m[1], start:parseStart(l)};
+  if ((m = l.match(CLIP))) return {kind:'clip', id:m[1]};
+  return null;
+}
+const canEmbed = () => location.protocol === 'http:' || location.protocol === 'https:';
+function embedHTML(it){
+  const v = videoOf(it);
+  if (!canEmbed()) return `<div class="vnote"><strong>Videos can't play in a file opened straight from your computer.</strong>
+      <span>YouTube blocks it. Start the app with <em>Start Brackets and Tierlisting.bat</em> or put it on a web address, and videos play here.</span>
+      <span class="vacts"><a class="chip" href="${esc(it.link)}" target="_blank" rel="noopener">Watch on ${v.kind === 'yt' ? 'YouTube' : 'Twitch'} ↗</a><button class="chip" data-act="videohelp">How to fix</button></span></div>`;
+  const src = v.kind === 'yt'
+    ? `https://www.youtube.com/embed/${v.id}?autoplay=1&rel=0&playsinline=1${v.start ? '&start=' + v.start : ''}`
+    : `https://clips.twitch.tv/embed?clip=${encodeURIComponent(v.id)}&parent=${encodeURIComponent(location.hostname)}&autoplay=true`;
+  return `<iframe src="${esc(src)}" title="${esc(it.name)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+}
+function posterHTML(it, key){
+  return `${media(it)}<button class="play" data-act="play" data-iid="${it.id}" aria-label="Play ${esc(it.name)}"><span class="tri"></span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+}
+function playVideo(iid){
+  document.querySelectorAll('.media[data-playing]').forEach(m => { if (m.dataset.iid !== iid){ const o = run.items[m.dataset.iid]; m.removeAttribute('data-playing'); m.innerHTML = posterHTML(o, m.dataset.key); } });
+  const m = document.querySelector(`.media[data-iid="${iid}"]`); if (!m || m.dataset.playing) return;
+  m.dataset.playing = '1'; m.innerHTML = embedHTML(run.items[iid]);
+}
+
+/* opts: {side, key, playKey, pickable, caption} */
+function contenderHTML(it, o = {}){
+  const vid = videoOf(it);
+  const mediaInner = vid ? posterHTML(it, o.playKey) : media(it);
+  const mediaAttrs = `class="media${vid ? ' vid' : ''}" data-iid="${it.id}" data-key="${o.playKey || ''}"${!vid && o.pickable ? ` data-act="pick" data-side="${o.side}"` : ''}`;
+  const label = o.pickable
+    ? `<button class="pick" data-act="pick" data-side="${o.side}" aria-label="Pick ${esc(it.name)}"><span class="nm">${esc(it.name)}</span><span class="hint">Pick <kbd>${o.key}</kbd>${vid ? ` · play <kbd>${o.playKey}</kbd>` : ''}</span></button>`
+    : `<div class="pick static"><span class="nm">${esc(it.name)}</span>${o.caption ? `<span class="hint">${o.caption}</span>` : ''}</div>`;
+  return `<div class="contender enter${o.pickable ? ' pickable' : ''}">
+    <div ${mediaAttrs}>${mediaInner}</div>${label}
+    <div class="tools">${it.img && !vid ? `<button class="chip" data-act="zoom" data-iid="${it.id}">Zoom</button>` : ''}${it.link ? `<a class="chip" href="${esc(it.link)}" target="_blank" rel="noopener">Open ↗</a>` : ''}</div>
+  </div>`;
+}
+function treeHTML(){
+  const cols = run.rounds.map((r, ri) => {
+    const res = run.results[ri] || []; const ms = [];
+    for (let i = 0; i < r.length; i += 2){
+      const m = res[i / 2]; const a = run.items[r[i]], b = r[i + 1] != null ? run.items[r[i + 1]] : null;
+      const cls = id => !m ? '' : m.w === id ? 'w' : 'l';
+      ms.push(`<div class="m"><div class="${cls(a.id)}">${esc(a.name)}</div>${b ? `<div class="${cls(b.id)}">${esc(b.name)}</div>` : '<div class="p">bye</div>'}</div>`);
+    }
+    return `<div class="col"><h4>${roundName(r.length)}</h4>${ms.join('')}</div>`;
+  });
+  if (run.champion) cols.push(`<div class="col"><h4>Champion</h4><div class="m"><div class="w">🏆 ${esc(run.items[run.champion].name)}</div></div></div>`);
+  return `<div class="tree">${cols.join('')}</div>`;
+}
+function boardHTML(compact){
+  const rows = run.tiers.map((t, ti) => `<div class="tr"><button class="tl ${t.label.length > 3 ? 'small' : ''}" style="background:${esc(t.color)}" data-act="tolabel" data-t="${ti}" title="Move selected here">${esc(t.label)}</button>
+      <div class="td" data-t="${ti}">${run.rows[ti].map(id => tileHTML(run.items[id])).join('')}</div></div>`).join('');
+  const rest = run.order.slice(run.idx);
+  const pool = !compact && rest.length ? `<div class="tr pool"><button class="tl" data-act="tolabel" data-t="-1">Unrated</button><div class="td" data-t="-1">${rest.map(id => tileHTML(run.items[id])).join('')}</div></div>` : '';
+  return `<div class="board ${compact ? 'compact' : ''}" id="board">${rows}${pool}</div>`;
+}
+function tileHTML(it){ return `<div class="tile" draggable="true" data-iid="${it.id}" title="${esc(it.name)}">${media(it)}<span>${esc(it.name)}</span></div>`; }
+
+function playHTML(){
+  const top = (sub, extra = '') => `<header class="bar"><button class="btn ghost" data-act="home">← Library</button>
+      <div style="min-width:0"><h2 class="crumb">${esc(run.title)}</h2><div class="sub">${sub}</div></div><div class="grow"></div>
+      ${extra}<button class="btn" data-act="undo" title="Undo (Z)">Undo <kbd>Z</kbd></button>
+      <button class="btn ghost" data-act="restart">Restart</button></header>`;
+
+  if (run.mode === 'bracket'){
+    const pct = Math.round(bracketProgress() * 100);
+    if (run.champion){
+      const res = run.results;
+      const final = res.length >= 2 ? res[res.length - 2].find(m => !m.bye) : null;
+      const runner = final ? final.l : null;
+      const semis = res.length >= 3 ? res[res.length - 3].filter(m => !m.bye).map(m => m.l) : [];
+      return `${top('Bracket finished', `<button class="btn" data-act="copy">Copy results</button>`)}
+        <div class="prog"><i style="width:100%"></i></div>
+        <section class="champ"><p class="crown">Champion</p>${contenderHTML(run.items[run.champion], {caption:'Winner of ' + Object.keys(run.items).length + ' options', playKey:'V'})}
+          <div class="places">${runner ? `<div class="place"><b>2nd</b>${esc(run.items[runner].name)}</div>` : ''}${semis.map(id => `<div class="place"><b>Semis</b>${esc(run.items[id].name)}</div>`).join('')}</div></section>
+        <section class="panel"><h2 class="crumb">Full bracket</h2>${treeHTML()}</section>`;
+    }
+    const r = curRound(), i = curRes().length * 2;
+    const a = run.items[r[i]], b = run.items[r[i + 1]];
+    return `${top(`${Object.keys(run.items).length} options · ${pct}% done`, `<button class="btn" data-act="tree">${view.tree ? 'Hide' : 'Show'} bracket</button>`)}
+      <div class="prog"><i style="width:${pct}%"></i></div>
+      <h3 class="round">${roundName(r.length)}<small>MATCH ${matchNo()} OF ${Math.ceil(r.length / 2)}</small></h3>
+      <section class="vs">${contenderHTML(a, {side:0, key:'1', playKey:'Q', pickable:true})}<div class="mid">VS</div>${contenderHTML(b, {side:1, key:'2', playKey:'E', pickable:true})}</section>
+      ${view.tree ? `<section class="panel">${treeHTML()}</section>` : ''}`;
+  }
+
+  // tier list
+  const n = run.order.length, done = run.idx >= n;
+  const pct = Math.round(run.idx / n * 100);
+  if (done){
+    return `${top('Tier list finished · drag tiles to adjust, or click a tile then a tier label', `<button class="btn" data-act="copy">Copy results</button>`)}
+      <div class="prog"><i style="width:100%"></i></div>${boardHTML(false)}`;
+  }
+  const it = run.items[run.order[run.idx]];
+  return `${top(`Item ${run.idx + 1} of ${n}`, `<button class="btn" data-act="tree">${view.tree ? 'Live board' : 'Full board'}</button>`)}
+    <div class="prog"><i style="width:${pct}%"></i></div>
+    <section class="solo${videoOf(it) ? ' wide' : ''}">${contenderHTML(it, {playKey:'V', caption: videoOf(it) ? 'Play <kbd>V</kbd>' : ''})}</section>
+    <div class="tierpick">${run.tiers.map((t, k) => `<button class="tb" style="background:${esc(t.color)}" data-act="tier" data-t="${k}">${esc(t.label)}</button>`).join('')}</div>
+    ${boardHTML(!view.tree)}`;
+}
+
+/* ---------- modals ---------- */
+function modal(html, onBind){
+  $('#layer').innerHTML = `<div class="scrim" id="scrim"><div class="modal enter" role="dialog" aria-modal="true">${html}</div></div>`;
+  $('#scrim').addEventListener('click', e => { if (e.target.id === 'scrim') closeModal(); });
+  onBind && onBind($('#layer .modal'));
+  const f = $('#layer .modal input, #layer .modal textarea, #layer .modal button'); f && f.focus();
+}
+function closeModal(){ $('#layer').innerHTML = ''; }
+
+function importModal(intoId){
+  const into = intoId ? findB(intoId) : null;
+  modal(`<h2>${into ? 'Add options' : 'Import bracket'}</h2>
+    <div class="help">Paste any of these:<br>
+      • JSON from a bracket you exported here, or bracket JSON from another site (fields like <code>name/title</code>, <code>image/thumbnail</code>, <code>url/link</code> are picked up)<br>
+      • One option per line, as <code>Name</code>, <code>Name | image URL</code> or <code>Name | image URL | link</code><br>
+      • A list of YouTube links or image links, one per line</div>
+    <textarea class="in" id="imp-text" rows="9" placeholder='[{"name":"Option 1","image":"https://…"}]&#10;or&#10;Option 1 | https://…/pic.png&#10;Option 2 | https://youtu.be/…'></textarea>
+    <div class="bar"><label class="btn sm" for="imp-file">Choose file…</label><input type="file" id="imp-file" accept=".json,.txt,.csv,.tsv,image/*" multiple hidden>
+      <span class="sub">.json / .txt, or image files</span><div class="grow"></div><span class="found" id="imp-found">Nothing found yet</span></div>
+    ${into ? '' : `<label class="f">Title<input class="in" id="imp-title" placeholder="Imported bracket"></label>`}
+    <div class="acts"><button class="btn ghost" data-m="cancel">Cancel</button><button class="btn primary" data-m="go" disabled>Import</button></div>`, m => {
+    let parsed = {items:[]}, imgItems = [];
+    const update = () => {
+      parsed = parseImport($('#imp-text').value);
+      const total = parsed.items.length + imgItems.length;
+      const f = $('#imp-found');
+      f.textContent = parsed.error ? parsed.error : total ? `Found ${total} option${total === 1 ? '' : 's'}` + (parsed.title ? ` · “${parsed.title}”` : '') : 'Nothing found yet';
+      f.className = 'found' + (total && !parsed.error ? ' ok' : '');
+      m.querySelector('[data-m=go]').disabled = !total;
+      const t = $('#imp-title'); if (t && parsed.title && !t.dataset.touched) t.value = parsed.title;
+    };
+    $('#imp-text').addEventListener('input', update);
+    const t = $('#imp-title'); t && t.addEventListener('input', () => t.dataset.touched = 1);
+    $('#imp-file').addEventListener('change', async e => {
+      for (const file of e.target.files){
+        if (file.type.startsWith('image/')){ const it = await readImageFile(file); it && imgItems.push(it); }
+        else { const txt = await file.text(); const ta = $('#imp-text'); ta.value = ta.value.trim() ? ta.value + '\n' + txt : txt; }
+      }
+      update();
+    });
+    m.querySelector('[data-m=cancel]').onclick = closeModal;
+    m.querySelector('[data-m=go]').onclick = () => {
+      const items = [...parsed.items, ...imgItems];
+      if (into){ into.items.push(...items); saveLib(); closeModal(); render(); toast(`Added ${items.length} options`); fillYtTitles(items, () => view.name === 'edit' && render()); return; }
+      const b = {id:uid(), title:($('#imp-title').value.trim() || parsed.title || 'Imported bracket'), desc:parsed.desc || '', items};
+      lib.unshift(b); if (saveLib()){ closeModal(); go({name:'edit', id:b.id}); toast(`Imported ${items.length} options`); fillYtTitles(items, n => { if (view.name === 'edit') render(); toast(`Fetched ${n} video titles`); }); }
+    };
+  });
+}
+
+function startModal(id){
+  const b = findB(id);
+  let mode = store.get('soloblt.lastmode', 'bracket');
+  const sizes = [2,4,8,16,32,64,128,256,512].filter(s => s < b.items.length);
+  const tierRows = () => tiers.map((t, k) => `<div class="trow" data-k="${k}"><input class="in" value="${esc(t.label)}" data-f="label" aria-label="Tier name"><input type="color" value="${esc(t.color)}" data-f="color" aria-label="Tier colour"><button class="btn sm ghost danger" data-tr="rm" ${tiers.length < 2 ? 'disabled' : ''}>✕</button></div>`).join('');
+  modal(`<h2>Start “${esc(b.title)}”</h2>
+    <div class="seg" role="group" aria-label="Format"><button data-mode="bracket">Bracket</button><button data-mode="tier">Tier list</button></div>
+    <label class="f">How many options to include?
+      <select class="in" id="st-n"><option value="0">All (${b.items.length})</option>${sizes.map(s => `<option value="${s}">${s}</option>`).join('')}</select></label>
+    <div class="sub" style="margin-top:-6px">Picking fewer skips random options to make the run shorter.</div>
+    <label class="chk"><input type="checkbox" id="st-shuf" ${prefs.shuffle ? 'checked' : ''}><span>Shuffle order<small>Off keeps the order from the editor (useful for seeded brackets).</small></span></label>
+    <label class="chk"><input type="checkbox" id="st-anim" ${prefs.anim ? 'checked' : ''}><span>Animations<small>Winner highlight and card transitions.</small></span></label>
+    <label class="chk" id="st-ap-wrap"><input type="checkbox" id="st-ap" ${prefs.autoplay ? 'checked' : ''}><span>Auto-play videos in tier lists<small>Each video starts as soon as it comes up.</small></span></label>
+    <div id="st-tiers" class="panel" style="padding:12px"><div class="bar"><strong>Tiers</strong><div class="grow"></div><button class="btn sm ghost" data-tr="reset">Reset</button><button class="btn sm" data-tr="add">Add tier</button></div><div class="rows" id="tier-rows">${tierRows()}</div></div>
+    ${run ? '<div class="sub">Starting replaces the run you have in progress.</div>' : ''}
+    <div class="acts"><button class="btn ghost" data-m="cancel">Cancel</button><button class="btn primary" data-m="go">Start</button></div>`, m => {
+    const setMode = md => { mode = md; m.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', x.dataset.mode === md)); $('#st-tiers').hidden = md !== 'tier'; $('#st-ap-wrap').hidden = md !== 'tier' || !b.items.some(videoOf); };
+    setMode(mode);
+    m.querySelectorAll('[data-mode]').forEach(x => x.onclick = () => setMode(x.dataset.mode));
+    const tr = $('#tier-rows');
+    tr.addEventListener('input', e => { const k = +e.target.closest('.trow').dataset.k; tiers[k][e.target.dataset.f] = e.target.value; store.set('soloblt.tiers', tiers); });
+    m.addEventListener('click', e => {
+      const a = e.target.closest('[data-tr]'); if (!a) return;
+      if (a.dataset.tr === 'add') tiers.push({label:'New', color:'#9aa4ff'});
+      if (a.dataset.tr === 'reset') tiers = DEFAULT_TIERS.map(t => ({...t}));
+      if (a.dataset.tr === 'rm') tiers.splice(+a.closest('.trow').dataset.k, 1);
+      store.set('soloblt.tiers', tiers); tr.innerHTML = tierRows();
+    });
+    m.querySelector('[data-m=cancel]').onclick = closeModal;
+    m.querySelector('[data-m=go]').onclick = () => {
+      prefs.shuffle = $('#st-shuf').checked; prefs.anim = $('#st-anim').checked; prefs.autoplay = $('#st-ap').checked; store.set('soloblt.prefs', prefs); applyPrefs();
+      store.set('soloblt.lastmode', mode);
+      let ids = b.items.map(x => x.id);
+      const n = +$('#st-n').value;
+      if (n) ids = shuffle(ids).slice(0, n).sort((x, y) => b.items.findIndex(i => i.id === x) - b.items.findIndex(i => i.id === y));
+      if (prefs.shuffle) ids = shuffle(ids);
+      const items = Object.fromEntries(b.items.filter(i => ids.includes(i.id)).map(i => [i.id, {...i}]));
+      if (mode === 'bracket'){ run = {mode, title:b.title, bid:b.id, items, rounds:[ids], results:[[]], champion:null}; settleBracket(); }
+      else run = {mode, title:b.title, bid:b.id, items, order:ids, idx:0, tiers:tiers.map(t => ({...t})), rows:tiers.map(() => []), hist:[]};
+      saveRun(); closeModal(); go({name:'play'});
+    };
+  });
+}
+
+function exportModal(id){
+  const b = findB(id);
+  const json = JSON.stringify({title:b.title, description:b.desc || '', options:b.items.map(({name, img, link}) => ({name, image:img, link}))}, null, 2);
+  modal(`<h2>Export “${esc(b.title)}”</h2>
+    <div class="sub">Save this JSON to back up the bracket or share it. Paste it into Import to load it again.</div>
+    <textarea class="in" id="ex-text" rows="12" readonly>${esc(json)}</textarea>
+    <div class="acts"><button class="btn ghost" data-m="cancel">Close</button><button class="btn" data-m="dl">Download .json</button><button class="btn primary" data-m="copy">Copy</button></div>`, m => {
+    m.querySelector('[data-m=cancel]').onclick = closeModal;
+    m.querySelector('[data-m=copy]').onclick = () => copyText(json, $('#ex-text'));
+    m.querySelector('[data-m=dl]').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([json], {type:'application/json'})); a.download = (b.title || 'bracket').replace(/[^\w\- ]+/g, '').trim() + '.json'; document.body.appendChild(a); a.click(); a.remove(); };
+  });
+}
+function copyText(txt, ta){
+  const fb = () => { if (ta){ ta.focus(); ta.select(); toast('Selected. Press Ctrl+C to copy.'); } };
+  try { navigator.clipboard.writeText(txt).then(() => toast('Copied'), fb); } catch(e){ fb(); }
+}
+function resultsText(){
+  if (run.mode === 'bracket'){
+    const lines = [`${run.title} — bracket`, `Champion: ${run.items[run.champion].name}`];
+    run.rounds.forEach((r, ri) => { const res = run.results[ri]; if (!res || !res.length || r.length < 2) return; lines.push('', roundName(r.length) + ':'); res.forEach(m => lines.push(m.bye ? `  ${run.items[m.w].name} (bye)` : `  ${run.items[m.w].name} beat ${run.items[m.l].name}`)); });
+    return lines.join('\n');
+  }
+  return [`${run.title} — tier list`, ...run.tiers.map((t, k) => `${t.label}: ${run.rows[k].map(id => run.items[id].name).join(', ') || '—'}`)].join('\n');
+}
+function videoHelp(){
+  modal(`<h2>Make videos play here</h2>
+    <p class="sub" style="margin:0">YouTube only plays embedded videos on pages that come from a web address. A file you double-click has no address, so YouTube refuses with "Error 153". Pick one of these:</p>
+    <ol class="steps">
+      <li><strong>Windows, no install:</strong> keep <code>index.html</code>, <code>Start Brackets and Tierlisting.bat</code> and <code>serve.ps1</code> in the same folder, then double-click <code>Start Brackets and Tierlisting.bat</code>. It opens <code>http://localhost:8642/</code>. Leave the black window open while you use it.</li>
+      <li><strong>Mac or Linux:</strong> in a terminal, go to the folder and run <code>python3 -m http.server 8642</code>, then open <code>http://localhost:8642/</code>.</li>
+      <li><strong>Online:</strong> upload the file to any static host (GitHub Pages, Netlify, Cloudflare Pages) and open its address.</li>
+    </ol>
+    <div class="help">For OBS, add a Browser source with the <code>http://localhost:8642/</code> address instead of "Local file".<br><br>
+      Your saved brackets belong to the address you opened the app from. To move them, use <strong>Export</strong> on each bracket here, then <strong>Import</strong> in the new address.</div>
+    <div class="acts"><button class="btn primary" data-m="cancel">Got it</button></div>`, m => { m.querySelector('[data-m=cancel]').onclick = closeModal; });
+}
+function lightbox(it){
+  modal(`<div class="lightbox" data-m="cancel"><img src="${esc(it.img)}" alt="${esc(it.name)}" data-n="${esc(it.name)}"><div class="cap">${esc(it.name)}</div></div>`, m => {
+    m.style.width = 'min(1000px,100%)'; m.querySelector('[data-m=cancel]').onclick = closeModal;
+  });
+}
+
+/* ---------- arm-to-confirm (no native confirm()) ---------- */
+function armed(btn, label, fn){
+  if (btn.classList.contains('armed')){ fn(); return; }
+  const old = btn.textContent; btn.classList.add('armed', 'danger'); btn.textContent = label;
+  setTimeout(() => { if (btn.isConnected){ btn.classList.remove('armed'); btn.textContent = old; } }, 3000);
+}
+
+/* ---------- events ---------- */
+function bindView(){
+  const b = view.name === 'edit' ? findB(view.id) : null;
+  if (b){
+    $('#ed-title').oninput = e => { b.title = e.target.value; saveLib(); };
+    $('#ed-desc').oninput = e => { b.desc = e.target.value; saveLib(); };
+    $('#rows').addEventListener('input', e => {
+      const row = e.target.closest('.row'); if (!row) return;
+      const it = b.items.find(x => x.id === row.dataset.iid); if (!it) return;
+      if (e.target.classList.contains('nm')) it.name = e.target.value;
+      if (e.target.classList.contains('u')) it.img = e.target.value.trim();
+      if (e.target.classList.contains('l')){ it.link = e.target.value.trim(); }
+      saveLib();
+    });
+    $('#rows').addEventListener('change', e => {
+      const row = e.target.closest('.row'); if (!row) return;
+      const it = b.items.find(x => x.id === row.dataset.iid); if (!it) return;
+      if (e.target.classList.contains('l') && !it.img && ytThumb(it.link)){ it.img = ytThumb(it.link); row.querySelector('.u').value = it.img; }
+      if (!it.name && (it.link || it.img)){ it.name = nameFromUrl(it.link || it.img); row.querySelector('.nm').value = it.name; }
+      row.querySelector('.th').innerHTML = media(it); saveLib();
+      fillYtTitles([it], () => { const r = document.querySelector(`.row[data-iid="${it.id}"] .nm`); if (r) r.value = it.name; });
+    });
+    $('#imgfiles').onchange = async e => {
+      const add = []; for (const f of e.target.files){ const it = await readImageFile(f); it && add.push(it); }
+      b.items.push(...add); if (saveLib()) { render(); toast(`Added ${add.length} images`); }
+    };
+  }
+  // drag and drop on board
+  const board = $('#board');
+  if (board){
+    let dragId = null;
+    board.addEventListener('dragstart', e => { const t = e.target.closest('.tile'); if (!t) return; dragId = t.dataset.iid; t.classList.add('drag'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); });
+    board.addEventListener('dragend', e => { const t = e.target.closest('.tile'); t && t.classList.remove('drag'); board.querySelectorAll('.over').forEach(x => x.classList.remove('over')); });
+    board.addEventListener('dragover', e => { const d = e.target.closest('.td'); if (!d) return; e.preventDefault(); board.querySelectorAll('.over').forEach(x => x !== d && x.classList.remove('over')); d.classList.add('over'); });
+    board.addEventListener('drop', e => {
+      const d = e.target.closest('.td'); if (!d || !dragId) return; e.preventDefault();
+      const before = e.target.closest('.tile'); moveTile(dragId, +d.dataset.t, before && before.dataset.iid !== dragId ? before.dataset.iid : null); dragId = null;
+    });
+  }
+}
+function moveTile(id, t, beforeId){
+  // remove from wherever it is
+  const wasUnrated = run.order.indexOf(id) >= run.idx;
+  run.rows.forEach(r => { const k = r.indexOf(id); if (k > -1) r.splice(k, 1); });
+  if (wasUnrated && t !== -1){
+    // bring forward into the "rated" part of order
+    run.order.splice(run.order.indexOf(id), 1); run.order.splice(run.idx, 0, id); run.idx++;
+  }
+  if (t === -1){
+    if (!wasUnrated){ run.order.splice(run.order.indexOf(id), 1); run.idx--; run.order.splice(run.idx, 0, id); }
+    run.hist = run.hist.filter(h => h.id !== id);
+  } else {
+    const row = run.rows[t]; const k = beforeId ? row.indexOf(beforeId) : -1;
+    if (k > -1) row.splice(k, 0, id); else row.push(id);
+    run.hist = run.hist.filter(h => h.id !== id); run.hist.push({id, t});
+  }
+  selTile = null; saveRun(); render();
+}
+let selTile = null;
+
+document.addEventListener('click', e => {
+  // tile selection (click-to-move for touch)
+  const tile = e.target.closest('.tile');
+  if (tile && $('#board')){ document.querySelectorAll('.tile.sel').forEach(x => x.classList.remove('sel')); if (selTile === tile.dataset.iid) selTile = null; else { selTile = tile.dataset.iid; tile.classList.add('sel'); } return; }
+  const a = e.target.closest('[data-act]'); if (!a || a.closest('#layer') && !a.closest('.modal')) return;
+  const act = a.dataset.act, id = a.dataset.id;
+  if (act === 'home') go({name:'home'});
+  else if (act === 'new'){ const b = {id:uid(), title:'New bracket', desc:'', items:[]}; lib.unshift(b); saveLib(); go({name:'edit', id:b.id}); }
+  else if (act === 'import') importModal();
+  else if (act === 'import-into') importModal(view.id);
+  else if (act === 'edit') go({name:'edit', id});
+  else if (act === 'start') startModal(id);
+  else if (act === 'export') exportModal(id);
+  else if (act === 'del') armed(a, 'Confirm delete', () => { lib = lib.filter(b => b.id !== id); saveLib(); render(); });
+  else if (act === 'resume') go({name:'play'});
+  else if (act === 'discard') armed(a, 'Confirm discard', () => { run = null; saveRun(); render(); });
+  else if (act === 'add'){ const b = findB(view.id); b.items.push({id:uid(), name:'', img:'', link:''}); saveLib(); render(); const rows = document.querySelectorAll('.row .nm'); rows[rows.length - 1].focus(); }
+  else if (act === 'rm'){ const b = findB(view.id); const iid = a.closest('.row').dataset.iid; b.items = b.items.filter(x => x.id !== iid); saveLib(); render(); }
+  else if (act === 'dedupe'){ const b = findB(view.id); const seen = new Set(); const before = b.items.length; b.items = b.items.filter(x => { const k = (x.name || '').trim().toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }); saveLib(); render(); toast(`Removed ${before - b.items.length} duplicates`); }
+  else if (act === 'pick') pickBracket(+a.dataset.side);
+  else if (act === 'tier') placeTier(+a.dataset.t);
+  else if (act === 'undo') run.mode === 'bracket' ? undoBracket() : undoTier();
+  else if (act === 'tree'){ view.tree = !view.tree; render(); }
+  else if (act === 'zoom') lightbox(run.items[a.dataset.iid]);
+  else if (act === 'play') playVideo(a.dataset.iid);
+  else if (act === 'videohelp') videoHelp();
+  else if (act === 'copy') copyText(resultsText());
+  else if (act === 'tolabel'){ if (selTile) moveTile(selTile, +a.dataset.t, null); else toast('Click a tile first, then a tier label to move it'); }
+  else if (act === 'restart') armed(a, 'Confirm restart', () => {
+    const ids = Object.keys(run.items); const order = prefs.shuffle ? shuffle(ids) : ids;
+    if (run.mode === 'bracket'){ run.rounds = [order]; run.results = [[]]; run.champion = null; settleBracket(); }
+    else { run.order = order; run.idx = 0; run.rows = run.tiers.map(() => []); run.hist = []; }
+    saveRun(); render();
+  });
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('#layer').innerHTML){ closeModal(); return; }
+  if ($('#layer').innerHTML || view.name !== 'play' || !run) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 'z' || k === 'backspace'){ e.preventDefault(); run.mode === 'bracket' ? undoBracket() : undoTier(); return; }
+  const playAt = n => { const m = document.querySelectorAll('.media.vid')[n]; m && playVideo(m.dataset.iid); };
+  if (run.mode === 'bracket' && !run.champion && (k === 'q' || k === 'e')){ playAt(k === 'q' ? 0 : 1); return; }
+  if (k === 'v'){ playAt(0); return; }
+  if (run.mode === 'bracket'){
+    if (k === '1' || k === 'arrowleft' || k === 'a') pickBracket(0);
+    else if (k === '2' || k === 'arrowright' || k === 'b') pickBracket(1);
+  }
+});
+
+render();
+</script>
+</body>
+</html>
