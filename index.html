@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Brackets and Tierlisting</title>
+<link rel="preconnect" href="https://www.youtube.com">
+<link rel="preconnect" href="https://i.ytimg.com">
+<link rel="preconnect" href="https://www.google.com">
 <style>
 /* Layout: a broadcast-booth console. One stage in the middle, controls docked around it, results board below. */
 :root{
@@ -96,7 +99,10 @@ textarea.in{resize:vertical;min-height:70px}
 .contender.pickable .media:not(.vid){cursor:pointer}
 .media{position:relative}
 .media iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
-.media.vid > img{object-fit:cover}
+.media.vid > img,.media .poster > img{object-fit:cover;width:100%;height:100%}
+.media .poster{position:absolute;inset:0;display:grid;place-items:center;background:var(--ink);z-index:1}
+.media .poster > .ph{width:100%;height:100%}
+.media.on .poster{display:none}
 .play{position:absolute;inset:0;margin:auto;width:84px;height:84px;border-radius:50%;border:0;background:rgba(14,16,20,.78);display:grid;place-items:center;transition:transform .15s,background .15s;backdrop-filter:blur(3px)}
 .play:hover{transform:scale(1.08);background:var(--accent)}
 .play .tri{width:0;height:0;border-style:solid;border-width:16px 0 16px 26px;border-color:transparent transparent transparent #fff;margin-left:6px}
@@ -351,6 +357,7 @@ function render(){
   else if (view.name === 'edit') app.innerHTML = editHTML();
   else if (view.name === 'play') app.innerHTML = playHTML();
   bindView();
+  wirePlayers();
   if (view.name === 'play' && run && run.mode === 'tier' && prefs.autoplay && canEmbed()){ const m = document.querySelector('.solo .media.vid'); m && playVideo(m.dataset.iid); }
 }
 
@@ -507,16 +514,59 @@ function embedHTML(it){
 function posterHTML(it, key){
   return `${media(it)}<button class="play" data-act="play" data-iid="${it.id}" aria-label="Play ${esc(it.name)}"><span class="tri"></span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
 }
+/* YouTube players are created as soon as a card appears (paused, hidden behind the
+   thumbnail), so pressing play only has to start a player that has already loaded. */
+const preloads = () => canEmbed();
+function ytSrc(v, autoplay){
+  return `https://www.youtube.com/embed/${v.id}?enablejsapi=1&rel=0&playsinline=1&origin=${encodeURIComponent(location.origin)}${v.start ? '&start=' + v.start : ''}${autoplay ? '&autoplay=1' : ''}`;
+}
+function videoMediaHTML(it, key){
+  const v = videoOf(it);
+  if (v.kind === 'yt' && preloads()){
+    return `<iframe class="yt" data-iid="${it.id}" src="${esc(ytSrc(v, false))}" title="${esc(it.name)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe><div class="poster">${posterHTML(it, key)}</div>`;
+  }
+  return posterHTML(it, key);
+}
+let players = {};
+function ytSend(p, func){ try { p.frame.contentWindow.postMessage(JSON.stringify({event:'command', func, args:[], id:p.id, channel:'widget'}), '*'); } catch(e){} }
+function wirePlayers(){
+  players = {};
+  document.querySelectorAll('iframe.yt').forEach(frame => {
+    const p = players[frame.dataset.iid] = {frame, id:frame.dataset.iid, ready:false, want:false, timer:null};
+    const hello = () => { try { frame.contentWindow.postMessage(JSON.stringify({event:'listening', id:p.id, channel:'widget'}), '*'); } catch(e){} };
+    frame.addEventListener('load', () => { hello(); setTimeout(hello, 400); setTimeout(hello, 1200); });
+  });
+}
+window.addEventListener('message', e => {
+  if (!/^https:\/\/(www\.)?youtube(-nocookie)?\.com$/.test(e.origin)) return;
+  let d; try { d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch(err){ return; }
+  const p = d && players[d.id]; if (!p || p.ready) return;
+  if (d.event === 'onReady' || d.event === 'initialDelivery' || d.event === 'infoDelivery'){
+    p.ready = true;
+    if (p.want){ clearTimeout(p.timer); ytSend(p, 'playVideo'); }
+  }
+});
 function playVideo(iid){
-  document.querySelectorAll('.media[data-playing]').forEach(m => { if (m.dataset.iid !== iid){ const o = run.items[m.dataset.iid]; m.removeAttribute('data-playing'); m.innerHTML = posterHTML(o, m.dataset.key); } });
-  const m = document.querySelector(`.media[data-iid="${iid}"]`); if (!m || m.dataset.playing) return;
-  m.dataset.playing = '1'; m.innerHTML = embedHTML(run.items[iid]);
+  const it = run.items[iid];
+  const m = document.querySelector(`.media[data-iid="${iid}"]`); if (!m) return;
+  // pause or close anything else that is playing
+  document.querySelectorAll('.media.on').forEach(o => { if (o !== m){ const op = players[o.dataset.iid]; if (op) ytSend(op, 'pauseVideo'); } });
+  document.querySelectorAll('.media[data-playing]').forEach(o => { if (o !== m){ o.removeAttribute('data-playing'); o.innerHTML = posterHTML(run.items[o.dataset.iid], o.dataset.key); } });
+  const p = players[iid];
+  if (p){
+    m.classList.add('on');
+    if (p.ready) ytSend(p, 'playVideo');
+    else { p.want = true; clearTimeout(p.timer); p.timer = setTimeout(() => { if (!p.ready) p.frame.src = ytSrc(videoOf(it), true); }, 2500); }
+    return;
+  }
+  if (m.dataset.playing) return;
+  m.dataset.playing = '1'; m.innerHTML = embedHTML(it);
 }
 
 /* opts: {side, key, playKey, pickable, caption} */
 function contenderHTML(it, o = {}){
   const vid = videoOf(it);
-  const mediaInner = vid ? posterHTML(it, o.playKey) : media(it);
+  const mediaInner = vid ? videoMediaHTML(it, o.playKey) : media(it);
   const mediaAttrs = `class="media${vid ? ' vid' : ''}" data-iid="${it.id}" data-key="${o.playKey || ''}"${!vid && o.pickable ? ` data-act="pick" data-side="${o.side}"` : ''}`;
   const label = o.pickable
     ? `<button class="pick" data-act="pick" data-side="${o.side}" aria-label="Pick ${esc(it.name)}"><span class="nm">${esc(it.name)}</span><span class="hint">Pick <kbd>${o.key}</kbd>${vid ? ` · play <kbd>${o.playKey}</kbd>` : ''}</span></button>`
