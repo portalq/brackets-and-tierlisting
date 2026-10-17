@@ -157,21 +157,22 @@ textarea.in{resize:vertical;min-height:70px}
 
 /* tier board */
 .board{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--panel)}
-.tr{display:grid;grid-template-columns:96px minmax(0,1fr);min-height:84px}
+.tr{display:grid;grid-template-columns:96px minmax(0,1fr);min-height:98px}
 .tr + .tr{border-top:1px solid var(--ink)}
 .tl{display:grid;place-items:center;font:700 24px/1 var(--f-display);color:#121212;padding:6px;text-align:center;overflow-wrap:anywhere;border:0;cursor:pointer}
 .tl.small{font-size:18px}
 .td{display:flex;flex-wrap:wrap;gap:4px;padding:4px;align-content:flex-start;min-width:0}
 .td.over{background:var(--panel-2)}
-.tile{position:relative;width:76px;height:76px;border-radius:5px;overflow:hidden;background:var(--ink);cursor:grab;flex:none;border:2px solid transparent}
+.tile{position:relative;width:90px;height:90px;border-radius:5px;overflow:hidden;background:var(--ink);cursor:grab;flex:none;border:2px solid transparent}
 .tile > img,.tile > .ph{width:100%;height:100%;object-fit:cover;font-size:20px}
-.tile span{position:absolute;inset:auto 0 0 0;background:linear-gradient(transparent,rgba(0,0,0,.85));font-size:10px;line-height:1.2;padding:10px 4px 3px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile span{position:absolute;inset:auto 0 0 0;background:linear-gradient(transparent,rgba(0,0,0,.85));font-size:11px;line-height:1.2;padding:10px 4px 3px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tile.sel{border-color:var(--accent)}
 .tile.drag{opacity:.4}
-.board.compact .tr{grid-template-columns:64px minmax(0,1fr);min-height:52px}
-.board.compact .tl{font-size:20px}
-.board.compact .tile{width:46px;height:46px}
-.board.compact .tile span{display:none}
+.tile.wide{width:160px}  /* videos keep the 16:9 shape of their thumbnail */
+.board.compact .tr{grid-template-columns:80px minmax(0,1fr);min-height:78px}
+.board.compact .tl{font-size:22px}
+.board.compact .tile{width:70px;height:70px}
+.board.compact .tile.wide{width:124px}
 .pool .tl{background:var(--panel-2);color:var(--muted);font-size:16px}
 
 /* modal */
@@ -596,7 +597,7 @@ function boardHTML(compact){
   const pool = !compact && rest.length ? `<div class="tr pool"><button class="tl" data-act="tolabel" data-t="-1">Unrated</button><div class="td" data-t="-1">${rest.map(id => tileHTML(run.items[id])).join('')}</div></div>` : '';
   return `<div class="board ${compact ? 'compact' : ''}" id="board">${rows}${pool}</div>`;
 }
-function tileHTML(it){ return `<div class="tile" draggable="true" data-iid="${it.id}" title="${esc(it.name)}">${media(it)}<span>${esc(it.name)}</span></div>`; }
+function tileHTML(it){ return `<div class="tile${videoOf(it) ? ' wide' : ''}" draggable="true" data-iid="${it.id}" title="${esc(it.name)}">${media(it)}<span>${esc(it.name)}</span></div>`; }
 
 function playHTML(){
   const top = (sub, extra = '') => `<header class="bar"><button class="btn ghost" data-act="home">← Library</button>
