@@ -72,13 +72,19 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mu
 .in{background:var(--ink);border:1px solid var(--line);border-radius:7px;padding:8px 10px;width:100%;min-width:0;text-transform:none;letter-spacing:0;font-weight:400;font-size:14px;color:var(--fg)}
 textarea.in{resize:vertical;min-height:70px}
 .rows{display:flex;flex-direction:column;gap:8px}
-.row{display:grid;grid-template-columns:28px 64px minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1.2fr) auto;gap:8px;align-items:center;background:var(--panel-2);border-radius:8px;padding:6px}
+.row{display:grid;grid-template-columns:28px 28px 64px minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1.2fr) auto;gap:8px;align-items:center;background:var(--panel-2);border-radius:8px;padding:6px}
 .row .n{font:500 12px var(--f-mono);color:var(--muted);text-align:center}
+.handle{width:28px;height:36px;border:0;background:transparent;color:var(--muted);border-radius:6px;cursor:grab;display:grid;place-items:center;touch-action:none;padding:0}
+.handle:hover,.handle:focus-visible{color:var(--fg);background:var(--line)}
+.handle svg{width:16px;height:16px}
+.row.lifted{position:relative;z-index:2;box-shadow:0 8px 24px rgba(0,0,0,.45);outline:1px solid var(--accent);cursor:grabbing}
+.row.lifted .handle{cursor:grabbing;color:var(--accent)}
+body.reordering{user-select:none;cursor:grabbing}
 .row .th{width:64px;height:44px;border-radius:5px;overflow:hidden;background:var(--ink)}
 .row .th > *{width:100%;height:100%;object-fit:cover}
 .row .ph{font-size:16px}
 @media (max-width:760px){
-  .row{grid-template-columns:64px minmax(0,1fr) auto}
+  .row{grid-template-columns:28px 64px minmax(0,1fr) auto}
   .row .n{display:none}
   .row .in.u, .row .in.l{grid-column:1 / -1}
 }
@@ -413,7 +419,7 @@ function editHTML(){
     </section>`;
 }
 function rowHTML(it, i){
-  return `<div class="row" data-iid="${it.id}"><span class="n">${i + 1}</span>
+  return `<div class="row" data-iid="${it.id}"><button class="handle" type="button" aria-label="Move ${esc(it.name || 'option')} — drag, or use the up and down arrow keys" title="Drag to reorder"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button><span class="n">${i + 1}</span>
     <div class="th">${media(it)}</div>
     <input class="in nm" placeholder="Name" value="${esc(it.name)}" aria-label="Name">
     <input class="in u" placeholder="Image URL" value="${it.img && it.img.startsWith('data:') ? '(uploaded image)' : esc(it.img)}" ${it.img && it.img.startsWith('data:') ? 'readonly' : ''} aria-label="Image URL">
@@ -806,6 +812,40 @@ function bindView(){
       if (!it.name && (it.link || it.img)){ it.name = nameFromUrl(it.link || it.img); row.querySelector('.nm').value = it.name; }
       row.querySelector('.th').innerHTML = media(it); saveLib();
       fillYtTitles([it], () => { const r = document.querySelector(`.row[data-iid="${it.id}"] .nm`); if (r) r.value = it.name; });
+    });
+    // reorder: drag the handle with mouse or touch, or focus it and press up/down
+    const rowsEl = $('#rows');
+    const commitOrder = () => {
+      const order = [...rowsEl.querySelectorAll('.row')].map(r => r.dataset.iid);
+      b.items.sort((x, y) => order.indexOf(x.id) - order.indexOf(y.id));
+      rowsEl.querySelectorAll('.row .n').forEach((n, i) => n.textContent = i + 1);
+      saveLib();
+    };
+    rowsEl.addEventListener('pointerdown', e => {
+      const h = e.target.closest('.handle'); if (!h || e.button > 0) return;
+      e.preventDefault();
+      const row = h.closest('.row'); row.classList.add('lifted'); document.body.classList.add('reordering');
+      const move = ev => {
+        const others = [...rowsEl.querySelectorAll('.row')].filter(r => r !== row);
+        const after = others.find(r => { const bb = r.getBoundingClientRect(); return ev.clientY < bb.top + bb.height / 2; });
+        if (after){ if (row.nextElementSibling !== after) rowsEl.insertBefore(row, after); }
+        else if (rowsEl.lastElementChild !== row) rowsEl.appendChild(row);
+        // keep the dragged row in view near the window edges
+        if (ev.clientY < 60) window.scrollBy(0, -12); else if (ev.clientY > innerHeight - 60) window.scrollBy(0, 12);
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+        row.classList.remove('lifted'); document.body.classList.remove('reordering'); commitOrder();
+      };
+      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+    });
+    rowsEl.addEventListener('keydown', e => {
+      const h = e.target.closest('.handle'); if (!h || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      e.preventDefault();
+      const row = h.closest('.row');
+      if (e.key === 'ArrowUp' && row.previousElementSibling) rowsEl.insertBefore(row, row.previousElementSibling);
+      else if (e.key === 'ArrowDown' && row.nextElementSibling) rowsEl.insertBefore(row.nextElementSibling, row);
+      h.focus(); commitOrder();
     });
     $('#imgfiles').onchange = async e => {
       const add = []; for (const f of e.target.files){ const it = await readImageFile(f); it && add.push(it); }
