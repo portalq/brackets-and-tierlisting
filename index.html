@@ -193,6 +193,8 @@ body.reordering{user-select:none;cursor:grabbing}
 .help{font-size:13px;color:var(--muted);background:var(--ink);border-radius:8px;padding:10px 12px}
 .help code{font:500 12px var(--f-mono);color:var(--fg)}
 .trow{display:grid;grid-template-columns:minmax(0,1fr) 48px auto;gap:8px;align-items:center}
+.trow{grid-template-columns:minmax(0,1fr) 48px auto auto}
+.et-count{white-space:nowrap}
 .trow input[type=color]{width:48px;height:36px;border:1px solid var(--line);border-radius:7px;background:var(--ink);padding:2px}
 .lightbox{cursor:zoom-out}
 .lightbox img{max-height:80vh;border-radius:8px;object-fit:contain}
@@ -633,15 +635,78 @@ function playHTML(){
   const n = run.order.length, done = run.idx >= n;
   const pct = Math.round(run.idx / n * 100);
   if (done){
-    return `${top('Tier list finished · drag tiles to adjust, or click a tile then a tier label', `<button class="btn" data-act="copy">Copy results</button>`)}
+    return `${top('Tier list finished · drag tiles to adjust, or click a tile then a tier label', `<button class="btn" data-act="edittiers">Edit tiers</button><button class="btn" data-act="copy">Copy results</button>`)}
       <div class="prog"><i style="width:100%"></i></div>${boardHTML(false)}`;
   }
   const it = run.items[run.order[run.idx]];
-  return `${top(`Item ${run.idx + 1} of ${n}`, `<button class="btn" data-act="tree">${view.tree ? 'Live board' : 'Full board'}</button>`)}
+  return `${top(`Item ${run.idx + 1} of ${n}`, `<button class="btn" data-act="edittiers">Edit tiers</button><button class="btn" data-act="tree">${view.tree ? 'Live board' : 'Full board'}</button>`)}
     <div class="prog"><i style="width:${pct}%"></i></div>
     <section class="solo${videoOf(it) ? ' wide' : ''}">${contenderHTML(it, {playKey:'V', caption: videoOf(it) ? 'Play <kbd>V</kbd>' : ''})}</section>
-    <div class="tierpick">${run.tiers.map((t, k) => `<button class="tb" style="background:${esc(t.color)}" data-act="tier" data-t="${k}">${esc(t.label)}</button>`).join('')}</div>
+    ${tierPickHTML()}
     ${boardHTML(!view.tree)}`;
+}
+function tierPickHTML(){
+  return `<div class="tierpick">${run.tiers.map((t, k) => `<button class="tb" style="background:${esc(t.color)}" data-act="tier" data-t="${k}">${esc(t.label)}</button>`).join('')}</div>`;
+}
+// Redraw only the tier buttons and board, so a playing video keeps playing.
+function refreshTierParts(){
+  const done = run.idx >= run.order.length;
+  const tp = document.querySelector('.tierpick'); if (tp) tp.outerHTML = tierPickHTML();
+  const bd = $('#board'); if (bd){ bd.outerHTML = boardHTML(done ? false : !view.tree); bindView(); }
+}
+
+/* ---------- edit tiers mid-game ---------- */
+function editTiersModal(){
+  const rowsHTML = () => run.tiers.map((t, k) => {
+    const n = run.rows[k].length;
+    return `<div class="trow" data-k="${k}"><input class="in" id="et-label-${k}" value="${esc(t.label)}" data-f="label" aria-label="Tier name">
+      <input type="color" id="et-color-${k}" value="${esc(t.color)}" data-f="color" aria-label="Tier colour">
+      <button class="btn sm ghost danger" data-et="rm" data-n="${n}" ${run.tiers.length < 2 ? 'disabled title="A tier list needs at least one tier"' : ''}>✕</button>
+      ${n ? `<span class="sub et-count">${n} item${n === 1 ? '' : 's'}</span>` : ''}</div>`;
+  }).join('');
+  modal(`<h2>Edit tiers</h2>
+    <div class="sub">Changes apply straight away. Removing a tier sends its items back to Unrated, and they come up next.</div>
+    <div class="rows" id="et-rows">${rowsHTML()}</div>
+    <div class="acts"><button class="btn" data-et="add">Add tier</button><div class="grow"></div><button class="btn primary" data-m="done">Done</button></div>`, m => {
+    const list = m.querySelector('#et-rows');
+    const redraw = () => { list.innerHTML = rowsHTML(); };
+    list.addEventListener('input', e => {
+      const k = +e.target.closest('.trow').dataset.k; const f = e.target.dataset.f; if (!f) return;
+      run.tiers[k][f] = f === 'label' ? e.target.value : e.target.value;
+      saveRun(); refreshTierParts();
+    });
+    m.addEventListener('click', e => {
+      const b = e.target.closest('[data-et]'); if (!b) return;
+      if (b.dataset.et === 'add'){
+        const palette = ['#ff7f7f','#ffbf7f','#ffdf7f','#ffff7f','#bfff7f','#7fff7f','#7fffff','#7fbfff','#7f7fff','#ff7fff','#bf7fbf','#c3c6d4'];
+        run.tiers.push({label:'New', color:palette[run.tiers.length % palette.length]}); run.rows.push([]);
+        saveRun(); refreshTierParts(); redraw();
+        const inputs = list.querySelectorAll('input[data-f=label]'); const last = inputs[inputs.length - 1]; last.focus(); last.select();
+        return;
+      }
+      if (b.dataset.et === 'rm'){
+        const k = +b.closest('.trow').dataset.k;
+        if (+b.dataset.n && !b.classList.contains('armed')){
+          b.classList.add('armed'); b.textContent = `Remove and unrate ${b.dataset.n}`;
+          setTimeout(() => { if (b.isConnected){ b.classList.remove('armed'); b.textContent = '✕'; } }, 3000);
+          return;
+        }
+        removeTier(k); redraw();
+      }
+    });
+    m.querySelector('[data-m=done]').onclick = closeModal;
+  });
+}
+function removeTier(k){
+  const back = run.rows[k];
+  // items in the removed tier return to the front of the unrated queue
+  back.forEach(id => { const i = run.order.indexOf(id); if (i > -1 && i < run.idx){ run.order.splice(i, 1); run.idx--; } });
+  run.order.splice(run.idx, 0, ...back);
+  run.hist = run.hist.filter(h => !back.includes(h.id)).map(h => h.t > k ? {...h, t:h.t - 1} : h);
+  run.tiers.splice(k, 1); run.rows.splice(k, 1);
+  saveRun();
+  // the current item or the finished screen may have changed, so redraw fully when items came back
+  if (back.length) render(); else refreshTierParts();
 }
 
 /* ---------- modals ---------- */
@@ -904,6 +969,7 @@ document.addEventListener('click', e => {
   else if (act === 'tier') placeTier(+a.dataset.t);
   else if (act === 'undo') run.mode === 'bracket' ? undoBracket() : undoTier();
   else if (act === 'tree'){ view.tree = !view.tree; render(); }
+  else if (act === 'edittiers') editTiersModal();
   else if (act === 'zoom') lightbox(run.items[a.dataset.iid]);
   else if (act === 'play') playVideo(a.dataset.iid);
   else if (act === 'videohelp') videoHelp();
