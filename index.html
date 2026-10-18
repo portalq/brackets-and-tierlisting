@@ -552,6 +552,14 @@ window.addEventListener('message', e => {
   const state = d.event === 'onStateChange' ? d.info : d.info && d.info.playerState;
   if (state === 1) showPlaying(p.id);
 });
+// A click inside a YouTube player moves focus into its frame. Watch for that, reveal the
+// clicked video, then hand focus back so the page's keyboard shortcuts keep working.
+setInterval(() => {
+  const f = document.activeElement;
+  if (!f || !f.matches || !f.matches('iframe.yt')) return;
+  showPlaying(f.dataset.iid);
+  f.blur(); window.focus();
+}, 250);
 function showPlaying(iid){
   const m = document.querySelector(`.media[data-iid="${iid}"]`); if (!m) return;
   m.classList.add('on');
