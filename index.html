@@ -106,7 +106,7 @@ body.reordering{user-select:none;cursor:grabbing}
 .media{position:relative}
 .media iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
 .media.vid > img,.media .poster > img{object-fit:cover;width:100%;height:100%}
-.media .poster{position:absolute;inset:0;display:grid;place-items:center;background:var(--ink);z-index:1}
+.media .poster{position:absolute;inset:0;display:grid;place-items:center;background:var(--ink);z-index:1;pointer-events:none}
 .media .poster > .ph{width:100%;height:100%}
 .media.on .poster{display:none}
 .play{position:absolute;inset:0;margin:auto;width:84px;height:84px;border-radius:50%;border:0;background:rgba(14,16,20,.78);display:grid;place-items:center;transition:transform .15s,background .15s;backdrop-filter:blur(3px)}
@@ -543,12 +543,20 @@ function wirePlayers(){
 window.addEventListener('message', e => {
   if (!/^https:\/\/(www\.)?youtube(-nocookie)?\.com$/.test(e.origin)) return;
   let d; try { d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch(err){ return; }
-  const p = d && players[d.id]; if (!p || p.ready) return;
-  if (d.event === 'onReady' || d.event === 'initialDelivery' || d.event === 'infoDelivery'){
+  const p = d && players[d.id]; if (!p) return;
+  if (!p.ready && (d.event === 'onReady' || d.event === 'initialDelivery' || d.event === 'infoDelivery')){
     p.ready = true;
     if (p.want){ clearTimeout(p.timer); ytSend(p, 'playVideo'); }
   }
+  // the player reports it started (e.g. the viewer clicked it directly): reveal it and pause the others
+  const state = d.event === 'onStateChange' ? d.info : d.info && d.info.playerState;
+  if (state === 1) showPlaying(p.id);
 });
+function showPlaying(iid){
+  const m = document.querySelector(`.media[data-iid="${iid}"]`); if (!m) return;
+  m.classList.add('on');
+  document.querySelectorAll('.media.on').forEach(o => { if (o !== m){ const op = players[o.dataset.iid]; if (op) ytSend(op, 'pauseVideo'); } });
+}
 function playVideo(iid){
   const it = run.items[iid];
   const m = document.querySelector(`.media[data-iid="${iid}"]`); if (!m) return;
