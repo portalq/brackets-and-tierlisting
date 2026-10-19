@@ -208,6 +208,16 @@ body.reordering{user-select:none;cursor:grabbing}
 .lightbox img{max-height:80vh;border-radius:8px;object-fit:contain}
 .lightbox .cap{text-align:center;font:500 22px var(--f-display);margin-top:10px}
 
+#mini{position:fixed;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));width:min(400px, calc(100vw - 32px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));z-index:40;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 14px 40px rgba(0,0,0,.55)}
+#mini .mbar{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 12px;border-bottom:1px solid var(--line);cursor:move;touch-action:none;user-select:none}
+#mini.dragging iframe{pointer-events:none}
+#mini .mtitle{flex:1;min-width:0;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#mini .mclose{border:0;background:transparent;color:var(--muted);width:30px;height:30px;border-radius:6px;font-size:18px;line-height:1;display:grid;place-items:center}
+#mini .mclose:hover,#mini .mclose:focus-visible{background:var(--line);color:var(--fg)}
+#mini .mvid{position:relative;aspect-ratio:16/9;background:#000}
+#mini .mvid iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+#mini .mvid .vnote{font-size:13px;padding:12px}
+.tile.wide{cursor:pointer}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--ink);padding:10px 16px;border-radius:8px;font-weight:600;z-index:60;max-width:calc(100% - 32px)}
 
 body.noanim *{transition:none!important;animation:none!important}
@@ -218,6 +228,7 @@ body.noanim *{transition:none!important;animation:none!important}
 </head>
 <body>
 <div class="wrap" id="app"></div>
+<div id="mini" hidden></div>
 <div id="layer"></div>
 <div class="toast" id="toast" hidden></div>
 
@@ -363,7 +374,7 @@ function readImageFile(file, max = 480){
 
 /* ---------- router ---------- */
 let view = {name:'home'};
-function go(v){ view = v; render(); window.scrollTo(0, 0); }
+function go(v){ if (v.name !== 'play') closeMini(); view = v; render(); window.scrollTo(0, 0); }
 function render(){
   const app = $('#app');
   if (view.name === 'home') app.innerHTML = homeHTML();
@@ -561,7 +572,43 @@ window.addEventListener('message', e => {
     if (p.want){ clearTimeout(p.timer); ytSend(p, 'playVideo'); }
   }
 });
+/* ---------- mini player: rewatch an item that's already on the board ---------- */
+function openMini(it){
+  const box = $('#mini');
+  // pause the big player so two videos don't play at once
+  document.querySelectorAll('.media.on').forEach(o => { const op = players[o.dataset.iid]; if (op) ytSend(op, 'pauseVideo'); });
+  document.querySelectorAll('.media[data-playing]').forEach(o => { o.removeAttribute('data-playing'); o.innerHTML = posterHTML(run.items[o.dataset.iid], o.dataset.key); });
+  box.innerHTML = `<div class="mbar"><span class="mtitle" title="${esc(it.name)} · drag to move">${esc(it.name)}</span>${it.link ? `<a class="chip" href="${esc(it.link)}" target="_blank" rel="noopener">Open ↗</a>` : ''}<button class="mclose" data-act="closemini" aria-label="Close player" title="Close (Esc)">✕</button></div>
+    <div class="mvid">${embedHTML(it)}</div>`;
+  box.dataset.iid = it.id; box.hidden = false; placeMini();
+}
+// drag the mini player around by its title bar (remembered while the page is open)
+let miniPos = null;
+function placeMini(){
+  const box = $('#mini'); if (!miniPos) { box.style.left = box.style.top = ''; box.style.right = box.style.bottom = ''; return; }
+  const w = box.offsetWidth, h = box.offsetHeight;
+  const x = Math.min(Math.max(8, miniPos.x), innerWidth - w - 8), y = Math.min(Math.max(8, miniPos.y), innerHeight - h - 8);
+  box.style.left = x + 'px'; box.style.top = y + 'px'; box.style.right = 'auto'; box.style.bottom = 'auto';
+}
+$('#mini').addEventListener('pointerdown', e => {
+  const bar = e.target.closest('.mbar'); if (!bar || e.target.closest('button, a') || e.button > 0) return;
+  e.preventDefault();
+  const box = $('#mini'), r = box.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+  box.classList.add('dragging');
+  const move = ev => { miniPos = {x:ev.clientX - dx, y:ev.clientY - dy}; placeMini(); };
+  const up = () => { box.classList.remove('dragging'); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+});
+window.addEventListener('resize', () => { if (!$('#mini').hidden) placeMini(); });
+function closeMini(){ const box = $('#mini'); if (box.hidden) return; box.hidden = true; box.innerHTML = ''; delete box.dataset.iid; }
+document.addEventListener('dblclick', e => {
+  const t = e.target.closest('#board .tile'); if (!t || !run) return;
+  const it = run.items[t.dataset.iid]; if (!it) return;
+  if (videoOf(it)) openMini(it); else if (it.img) lightbox(it);
+});
+
 function playVideo(iid){
+  closeMini();
   const it = run.items[iid];
   const m = document.querySelector(`.media[data-iid="${iid}"]`); if (!m) return;
   // pause or close anything else that is playing
@@ -613,7 +660,7 @@ function boardHTML(compact){
   const pool = !compact && rest.length ? `<div class="tr pool"><button class="tl" data-act="tolabel" data-t="-1">Unrated</button><div class="td" data-t="-1">${rest.map(id => tileHTML(run.items[id])).join('')}</div></div>` : '';
   return `<div class="board ${compact ? 'compact' : ''}" id="board">${rows}${pool}</div>`;
 }
-function tileHTML(it){ return `<div class="tile${videoOf(it) ? ' wide' : ''}" draggable="true" data-iid="${it.id}" title="${esc(it.name)}">${media(it)}<span>${esc(it.name)}</span></div>`; }
+function tileHTML(it){ return `<div class="tile${videoOf(it) ? ' wide' : ''}" draggable="true" data-iid="${it.id}" title="${esc(it.name)}${videoOf(it) ? ' · double-click to play' : it.img ? ' · double-click to enlarge' : ''}">${media(it)}<span>${esc(it.name)}</span></div>`; }
 
 function playHTML(){
   const top = (sub, extra = '') => `<header class="bar"><button class="btn ghost" data-act="home">← Library</button>
@@ -1029,6 +1076,7 @@ document.addEventListener('click', e => {
   else if (act === 'undo') run.mode === 'bracket' ? undoBracket() : undoTier();
   else if (act === 'tree'){ view.tree = !view.tree; render(); }
   else if (act === 'edittiers') editTiersModal();
+  else if (act === 'closemini') closeMini();
   else if (act === 'zoom') lightbox(run.items[a.dataset.iid]);
   else if (act === 'play') playVideo(a.dataset.iid);
   else if (act === 'videohelp') videoHelp();
@@ -1044,6 +1092,7 @@ document.addEventListener('click', e => {
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && $('#layer').innerHTML){ closeModal(); return; }
+  if (e.key === 'Escape' && !$('#mini').hidden){ closeMini(); return; }
   if ($('#layer').innerHTML || view.name !== 'play' || !run) return;
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
