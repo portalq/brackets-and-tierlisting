@@ -28,6 +28,7 @@ img{max-width:100%}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+body.wide .wrap{max-width:1440px}
 .wrap{max-width:1200px;margin:0 auto;padding-block:20px 60px;display:flex;flex-direction:column;gap:20px}
 
 /* top bar */
@@ -94,7 +95,7 @@ body.reordering{user-select:none;cursor:grabbing}
 .prog > i{display:block;height:100%;background:var(--accent);transition:width .3s}
 .round{font:300 clamp(28px,5vw,44px)/1.1 var(--f-display);margin:0;text-align:center}
 .round small{display:block;font:500 13px var(--f-body);letter-spacing:.08em;color:var(--muted);margin-top:6px}
-.vs{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:18px;align-items:stretch}
+.vs{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:14px;align-items:stretch}
 .vs .mid{display:grid;place-items:center;font:700 28px var(--f-display);color:var(--accent)}
 @media (max-width:640px){.vs{grid-template-columns:1fr}.vs .mid{font-size:24px}}
 .contender{position:relative;background:var(--panel);border:2px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;transition:transform .15s,border-color .15s,opacity .3s}
@@ -368,6 +369,8 @@ function render(){
   if (view.name === 'home') app.innerHTML = homeHTML();
   else if (view.name === 'edit') app.innerHTML = editHTML();
   else if (view.name === 'play') app.innerHTML = playHTML();
+  // bracket matchups get a wider page so the two cards can be bigger
+  document.body.classList.toggle('wide', view.name === 'play' && !!run && run.mode === 'bracket' && !run.champion);
   bindView();
   wirePlayers();
   if (view.name === 'play' && run && run.mode === 'tier' && prefs.autoplay && canEmbed()){ const m = document.querySelector('.solo .media.vid'); m && playVideo(m.dataset.iid); }
