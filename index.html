@@ -193,9 +193,10 @@ body.reordering{user-select:none;cursor:grabbing}
 .help{font-size:13px;color:var(--muted);background:var(--ink);border-radius:8px;padding:10px 12px}
 .help code{font:500 12px var(--f-mono);color:var(--fg)}
 .trow{display:grid;grid-template-columns:minmax(0,1fr) 48px auto;gap:8px;align-items:center}
-.trow{grid-template-columns:minmax(0,1fr) 48px auto auto auto}
-#et-rows .trow{grid-template-columns:minmax(0,1fr) 48px auto auto auto 56px}
-.trow .mv{padding:5px 8px}
+.trow{grid-template-columns:28px minmax(0,1fr) 48px auto}
+#et-rows .trow{grid-template-columns:28px minmax(0,1fr) 48px auto 56px}
+.trow.lifted{position:relative;z-index:2;box-shadow:0 8px 24px rgba(0,0,0,.45);outline:1px solid var(--accent);border-radius:8px;background:var(--panel)}
+.trow.lifted .handle{color:var(--accent);cursor:grabbing}
 .et-count{white-space:nowrap}
 .trow input[type=color]{width:48px;height:36px;border:1px solid var(--line);border-radius:7px;background:var(--ink);padding:2px}
 .lightbox{cursor:zoom-out}
@@ -661,9 +662,8 @@ function refreshTierParts(){
 function editTiersModal(){
   const rowsHTML = () => run.tiers.map((t, k) => {
     const n = run.rows[k].length;
-    return `<div class="trow" data-k="${k}"><input class="in" id="et-label-${k}" value="${esc(t.label)}" data-f="label" aria-label="Tier name">
+    return `<div class="trow" data-k="${k}"><button class="handle" type="button" aria-label="Move tier — drag, or use the up and down arrow keys" title="Drag to reorder"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button><input class="in" id="et-label-${k}" value="${esc(t.label)}" data-f="label" aria-label="Tier name">
       <input type="color" id="et-color-${k}" value="${esc(t.color)}" data-f="color" aria-label="Tier colour">
-      <button class="btn sm ghost mv" data-et="up" aria-label="Move tier up" ${k === 0 ? 'disabled' : ''}>↑</button><button class="btn sm ghost mv" data-et="down" aria-label="Move tier down" ${k === run.tiers.length - 1 ? 'disabled' : ''}>↓</button>
       <button class="btn sm ghost danger" data-et="rm" data-n="${n}" ${run.tiers.length < 2 ? 'disabled title="A tier list needs at least one tier"' : ''}>✕</button>
       <span class="sub et-count">${n ? `${n} item${n === 1 ? '' : 's'}` : ''}</span></div>`;
   }).join('');
@@ -687,12 +687,6 @@ function editTiersModal(){
         const inputs = list.querySelectorAll('input[data-f=label]'); const last = inputs[inputs.length - 1]; last.focus(); last.select();
         return;
       }
-      if (b.dataset.et === 'up' || b.dataset.et === 'down'){
-        const k = +b.closest('.trow').dataset.k, j = b.dataset.et === 'up' ? k - 1 : k + 1;
-        moveTier(k, j); redraw();
-        const again = list.querySelector(`.trow[data-k="${j}"] [data-et="${b.dataset.et}"]`); if (again && !again.disabled) again.focus();
-        return;
-      }
       if (b.dataset.et === 'rm'){
         const k = +b.closest('.trow').dataset.k;
         if (+b.dataset.n && !b.classList.contains('armed')){
@@ -703,14 +697,53 @@ function editTiersModal(){
         removeTier(k); redraw();
       }
     });
+    sortable(list, '.trow', order => { applyRunTierOrder(order); redraw(); });
     m.querySelector('[data-m=done]').onclick = closeModal;
   });
 }
-function moveTier(k, j){
-  if (j < 0 || j >= run.tiers.length) return;
-  [run.tiers[k], run.tiers[j]] = [run.tiers[j], run.tiers[k]];
-  [run.rows[k], run.rows[j]] = [run.rows[j], run.rows[k]];
-  run.hist = run.hist.map(h => h.t === k ? {...h, t:j} : h.t === j ? {...h, t:k} : h);
+/* Drag-to-reorder rows by their .handle (mouse or touch), or focus a handle and use up/down.
+   onDone gets the rows' original data-k values in their new order. */
+function sortable(container, rowSel, onDone){
+  const finish = keepFocusOn => {
+    const order = [...container.querySelectorAll(rowSel)].map(r => +r.dataset.k);
+    if (order.some((k, i) => k !== i)){
+      const pos = keepFocusOn ? order.indexOf(+keepFocusOn.dataset.k) : -1;
+      onDone(order);
+      if (pos > -1){ const h = container.querySelectorAll(rowSel)[pos]?.querySelector('.handle'); h && h.focus(); }
+    }
+  };
+  container.addEventListener('pointerdown', e => {
+    const h = e.target.closest('.handle'); if (!h || !container.contains(h) || e.button > 0) return;
+    e.preventDefault();
+    const row = h.closest(rowSel); row.classList.add('lifted'); document.body.classList.add('reordering');
+    const move = ev => {
+      const others = [...container.querySelectorAll(rowSel)].filter(r => r !== row);
+      const after = others.find(r => { const bb = r.getBoundingClientRect(); return ev.clientY < bb.top + bb.height / 2; });
+      if (after){ if (row.nextElementSibling !== after) container.insertBefore(row, after); }
+      else if (others.length && others[others.length - 1].nextElementSibling !== row) others[others.length - 1].after(row);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      row.classList.remove('lifted'); document.body.classList.remove('reordering'); finish(null);
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  });
+  container.addEventListener('keydown', e => {
+    const h = e.target.closest('.handle'); if (!h || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    e.preventDefault();
+    const row = h.closest(rowSel);
+    const prev = row.previousElementSibling, next = row.nextElementSibling;
+    if (e.key === 'ArrowUp' && prev && prev.matches(rowSel)) container.insertBefore(row, prev);
+    else if (e.key === 'ArrowDown' && next && next.matches(rowSel)) next.after(row);
+    else return;
+    finish(row);
+  });
+}
+// order = old tier indexes in their new order
+function applyRunTierOrder(order){
+  run.tiers = order.map(k => run.tiers[k]);
+  run.rows = order.map(k => run.rows[k]);
+  run.hist = run.hist.map(h => ({...h, t:order.indexOf(h.t)}));
   saveRun(); refreshTierParts();
 }
 function removeTier(k){
@@ -779,7 +812,7 @@ function startModal(id){
   const b = findB(id);
   let mode = store.get('soloblt.lastmode', 'bracket');
   const sizes = [2,4,8,16,32,64,128,256,512].filter(s => s < b.items.length);
-  const tierRows = () => tiers.map((t, k) => `<div class="trow" data-k="${k}"><input class="in" value="${esc(t.label)}" data-f="label" aria-label="Tier name"><input type="color" value="${esc(t.color)}" data-f="color" aria-label="Tier colour"><button class="btn sm ghost mv" data-tr="up" aria-label="Move tier up" ${k === 0 ? 'disabled' : ''}>↑</button><button class="btn sm ghost mv" data-tr="down" aria-label="Move tier down" ${k === tiers.length - 1 ? 'disabled' : ''}>↓</button><button class="btn sm ghost danger" data-tr="rm" ${tiers.length < 2 ? 'disabled' : ''}>✕</button></div>`).join('');
+  const tierRows = () => tiers.map((t, k) => `<div class="trow" data-k="${k}"><button class="handle" type="button" aria-label="Move tier — drag, or use the up and down arrow keys" title="Drag to reorder"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button><input class="in" value="${esc(t.label)}" data-f="label" aria-label="Tier name"><input type="color" value="${esc(t.color)}" data-f="color" aria-label="Tier colour"><button class="btn sm ghost danger" data-tr="rm" ${tiers.length < 2 ? 'disabled' : ''}>✕</button></div>`).join('');
   modal(`<h2>Start “${esc(b.title)}”</h2>
     <div class="seg" role="group" aria-label="Format"><button data-mode="bracket">Bracket</button><button data-mode="tier">Tier list</button></div>
     <label class="f">How many options to include?
@@ -795,13 +828,13 @@ function startModal(id){
     setMode(mode);
     m.querySelectorAll('[data-mode]').forEach(x => x.onclick = () => setMode(x.dataset.mode));
     const tr = $('#tier-rows');
+    sortable(tr, '.trow', order => { tiers = order.map(k => tiers[k]); store.set('soloblt.tiers', tiers); tr.innerHTML = tierRows(); });
     tr.addEventListener('input', e => { const k = +e.target.closest('.trow').dataset.k; tiers[k][e.target.dataset.f] = e.target.value; store.set('soloblt.tiers', tiers); });
     m.addEventListener('click', e => {
       const a = e.target.closest('[data-tr]'); if (!a) return;
       if (a.dataset.tr === 'add') tiers.push({label:'New', color:'#9aa4ff'});
       if (a.dataset.tr === 'reset') tiers = DEFAULT_TIERS.map(t => ({...t}));
       if (a.dataset.tr === 'rm') tiers.splice(+a.closest('.trow').dataset.k, 1);
-      if (a.dataset.tr === 'up' || a.dataset.tr === 'down'){ const k = +a.closest('.trow').dataset.k, j = a.dataset.tr === 'up' ? k - 1 : k + 1; if (j >= 0 && j < tiers.length) [tiers[k], tiers[j]] = [tiers[j], tiers[k]]; }
       store.set('soloblt.tiers', tiers); tr.innerHTML = tierRows();
     });
     m.querySelector('[data-m=cancel]').onclick = closeModal;
