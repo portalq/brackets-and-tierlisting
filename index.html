@@ -98,11 +98,15 @@ body.reordering{user-select:none;cursor:grabbing}
 .vs .mid{display:grid;place-items:center;font:700 28px var(--f-display);color:var(--accent)}
 @media (max-width:640px){.vs{grid-template-columns:1fr}.vs .mid{font-size:24px}}
 .contender{position:relative;background:var(--panel);border:2px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;transition:transform .15s,border-color .15s,opacity .3s}
-.contender.pickable:hover{border-color:var(--accent)}
 .contender .pick{all:unset;cursor:pointer;display:flex;flex-direction:column;flex:1}
 .contender .pick.static{cursor:default}
 .contender .pick:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
-.contender.pickable .media:not(.vid){cursor:pointer}
+.contender .pick.static .hint:empty{display:none}
+.pickbtn{margin:0 16px 16px;border:0;border-radius:9px;padding:12px 16px;background:var(--accent);color:var(--accent-ink);font:700 17px/1.2 var(--f-display);display:flex;align-items:center;justify-content:center;gap:10px;transition:filter .15s,transform .1s}
+.pickbtn:hover{filter:brightness(1.08)}
+.pickbtn:active{transform:translateY(1px)}
+.pickbtn kbd{background:rgba(0,0,0,.14);border-color:rgba(0,0,0,.22);color:var(--accent-ink)}
+.contender.won .pickbtn,.contender.lost .pickbtn{visibility:hidden}
 .media{position:relative}
 .media iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
 .media.vid > img,.media .poster > img{object-fit:cover;width:100%;height:100%}
@@ -575,9 +579,11 @@ function playVideo(iid){
 function contenderHTML(it, o = {}){
   const vid = videoOf(it);
   const mediaInner = vid ? videoMediaHTML(it, o.playKey) : media(it);
-  const mediaAttrs = `class="media${vid ? ' vid' : ''}" data-iid="${it.id}" data-key="${o.playKey || ''}"${!vid && o.pickable ? ` data-act="pick" data-side="${o.side}"` : ''}`;
+  const mediaAttrs = `class="media${vid ? ' vid' : ''}" data-iid="${it.id}" data-key="${o.playKey || ''}"`;
+  // in brackets only the "Pick winner" button picks, so clicking the video or image can't pick by accident
   const label = o.pickable
-    ? `<button class="pick" data-act="pick" data-side="${o.side}" aria-label="Pick ${esc(it.name)}"><span class="nm">${esc(it.name)}</span><span class="hint">Pick <kbd>${o.key}</kbd>${vid ? ` · play <kbd>${o.playKey}</kbd>` : ''}</span></button>`
+    ? `<div class="pick static"><span class="nm">${esc(it.name)}</span>${vid ? `<span class="hint">Play <kbd>${o.playKey}</kbd></span>` : ''}</div>
+       <button class="pickbtn" data-act="pick" data-side="${o.side}" aria-label="Pick ${esc(it.name)} as the winner">Pick winner <kbd>${o.key}</kbd></button>`
     : `<div class="pick static"><span class="nm">${esc(it.name)}</span>${o.caption ? `<span class="hint">${o.caption}</span>` : ''}</div>`;
   return `<div class="contender enter${o.pickable ? ' pickable' : ''}">
     <div ${mediaAttrs}>${mediaInner}</div>${label}
